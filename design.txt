@@ -1,0 +1,58 @@
+Board class:
+-- Bitboard
+-- whose turn: enum Colour
+-- move num
+-- half move num
+-- castling rights: struct/enum? whether that side has castled or not on each side
+-- en passant square: Option<Square>
+-- move history: Vec<Move> stack?
+-- board hash
+
+fn GenerateCandidateMoves(&self) -> Vec<Move>;
+fn MakeMove(&mut self, move: &Move);
+FenToBoard(fen: &str) -> Result<Board>;
+Print, DebugPrint
+
+BitBoard class:
+-- white,
+-- black,
+-- white pawns
+-- black pawns
+-- white king,
+-- black king,
+-- white queen,
+-- black queen,
+-- white bishops,
+-- black bishops,
+-- white knights,
+-- black knights,
+-- white rooks,
+-- black rooks
+
+BitBoard functions needed:
+fn PlacePiece(&mut self, colour: Colour, piece: Piece, square: Square);
+fn RemovePiece(&mut self, colour: Colour, piece: Piece, square: Square);
+fn GetPieceMask(&self, colour: Colour, piece: Piece) -> u64;
+fn GetColourMask(&self, colour: Colour) -> u64;
+fn GetAllMask(&self) -> u64;
+Print, DebugPrint
+
+Move class:
+-- source square
+-- destination square
+-- Move type (quiet move, capture, en-passant, move-promotion, capture-promotion) if en-passant, can work out where to put back pawn
+-- Captured Piece (for undoing)
+
+
+enums:
+Colour: White,Black
+Square: A1,A2...H7,H8
+Piece: Pawn, King, Queen, Bishop, Knight, Rook
+MoveType: Quiet, Capture(Piece), EnPassant, MovePromotion(Piece), CapturePromotion(Piece)
+
+Use inbuilt u64 functions when you can: e.g. `count_ones()`
+
+
+
+
+
