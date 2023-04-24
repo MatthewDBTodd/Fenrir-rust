@@ -2,6 +2,8 @@ use num_derive::FromPrimitive;
 
 pub mod bitboard;
 pub mod board;
+pub mod king;
+pub mod test_helpers;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Colour {
