@@ -1,21 +1,11 @@
-use crate::masks;
+use crate::masks::*;
 
-/*
- * Shifting left goes up a file, i.e. A -> B file. But when in H file that wraps 
- * it back into the A file, so when shifting left we need to mask out the A file.
- * And visa-versa for shifting right.
- */
 pub fn init() -> Vec<u64> {
     let mut rv = Vec::with_capacity(64);
     let mut mask: u64 = 1;
     for _ in 0..64 {
-        // 0 0 0 0 1 0 0 0 => 0 0 0 1 1 1 0 0
-        let n = mask | ((mask << 1) & masks::NOT_A_FILE) | ((mask >> 1) & masks::NOT_H_FILE);
-
-        // 0 0 0 0 0 0 0 0    0 0 0 1 1 1 0 0
-        // 0 0 0 1 1 1 0 0 => 0 0 0 1 1 1 0 0
-        // 0 0 0 0 0 0 0 0 => 0 0 0 1 1 1 0 0
-        let n = n | (n << 8) | (n >> 8);
+        let n = mask | (east!(mask, 1) & NOT_A_FILE) | (west!(mask, 1) & NOT_H_FILE);
+        let n = n | north!(n, 1) | south!(n, 1);
 
         rv.push(n);
         mask <<= 1;
@@ -26,110 +16,65 @@ pub fn init() -> Vec<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_helpers::*;
     use crate::Square;
-    use crate::test_helpers;
-    
+
     #[test]
     fn test_init() {
         let king_attack_patterns = init();
 
-        // Test E4
-        let expected = 0x3838380000;
-        let actual = king_attack_patterns[Square::E4 as usize];
-        assert_eq!(
-            actual,
-            expected,
-            "King attack pattern for E4 is incorrect. Expected: {} Actual: {}",
-            test_helpers::hex_to_board(expected) ,
-            test_helpers::hex_to_board(actual),
+        test_bitboard_eq!(
+            "King attack pattern for E4",
+            fen_to_hex("8/8/8/3KKK2/3KKK2/3KKK2/8/8 w - - 0 1"),
+            king_attack_patterns[Square::E4 as usize],
         );
 
-        // Test A1 (corner)
-        let expected = 0x303;
-        let actual = king_attack_patterns[Square::A1 as usize];
-        assert_eq!(
-            actual,
-            expected,
-            "King attack pattern for A1 is incorrect. Expected: {} Actual: {}",
-            test_helpers::hex_to_board(expected),
-            test_helpers::hex_to_board(actual),
+        test_bitboard_eq!(
+            "King attack pattern for A1 (corner)",
+            fen_to_hex("8/8/8/8/8/8/KK6/KK6 w - - 0 1"),
+            king_attack_patterns[Square::A1 as usize],
         );
 
-        // Test H1 (corner)
-        let expected = 0xc0c0;
-        let actual = king_attack_patterns[Square::H1 as usize];
-        assert_eq!(
+        test_bitboard_eq!(
+            "King attack pattern for H1 (corner)",
+            fen_to_hex("8/8/8/8/8/8/6KK/6KK w - - 0 1"),
             king_attack_patterns[Square::H1 as usize],
-            expected,
-            "King attack pattern for H1 is incorrect. Expected: {} Actual: {}",
-            test_helpers::hex_to_board(expected), 
-            test_helpers::hex_to_board(actual),
         );
 
-        // Test A8 (corner)
-        let expected = 0x303000000000000;
-        let actual = king_attack_patterns[Square::A8 as usize];
-        assert_eq!(
+        test_bitboard_eq!(
+            "King attack pattern for A8 (corner)",
+            fen_to_hex("KK6/KK6/8/8/8/8/8/8 w - - 0 1"),
             king_attack_patterns[Square::A8 as usize],
-            expected,
-            "King attack pattern for A8 is incorrect. Expected: {} Actual: {}",
-            test_helpers::hex_to_board(expected),
-            test_helpers::hex_to_board(actual),
         );
 
-        // Test H8 (corner)
-        let expected = 0xc0c0000000000000;
-        let actual = king_attack_patterns[Square::H8 as usize];
-        assert_eq!(
+        test_bitboard_eq!(
+            "King attack pattern for H8 (corner)",
+            fen_to_hex("6KK/6KK/8/8/8/8/8/8 w - - 0 1"),
             king_attack_patterns[Square::H8 as usize],
-            expected,
-            "King attack pattern for H8 is incorrect. Expected: {} Actual: {}",
-            test_helpers::hex_to_board(expected),
-            test_helpers::hex_to_board(actual), 
         );
 
-        // Test A4 (edge)
-        let expected = 0x303030000;
-        let actual = king_attack_patterns[Square::A4 as usize];
-        assert_eq!(
+        test_bitboard_eq!(
+            "King attack pattern for A4 (edge)",
+            fen_to_hex("8/8/8/KK6/KK6/KK6/8/8 w - - 0 1"),
             king_attack_patterns[Square::A4 as usize],
-            expected,
-            "King attack pattern for A4 is incorrect. Expected: {} Actual: {}",
-            test_helpers::hex_to_board(expected), 
-            test_helpers::hex_to_board(actual), 
         );
 
-        // Test H4 (edge)
-        let expected = 0xc0c0c00000;
-        let actual = king_attack_patterns[Square::H4 as usize];
-        assert_eq!(
+        test_bitboard_eq!(
+            "King attack pattern for H4 (edge)",
+            fen_to_hex("8/8/8/6KK/6KK/6KK/8/8 w - - 0 1"),
             king_attack_patterns[Square::H4 as usize],
-            expected,
-            "King attack pattern for H4 is incorrect. Expected {} Actual {}",
-            test_helpers::hex_to_board(expected),
-            test_helpers::hex_to_board(actual),
         );
 
-        // Test E1 (edge)
-        let expected = 0x3838;
-        let actual = king_attack_patterns[Square::E1 as usize];
-        assert_eq!(
+        test_bitboard_eq!(
+            "King attack pattern for E1 (edge)",
+            fen_to_hex("8/8/8/8/8/8/3KKK2/3KKK2 w - - 0 1"),
             king_attack_patterns[Square::E1 as usize],
-            expected,
-            "King attack pattern for E1 is incorrect. Expected {} Actual: {}",
-            test_helpers::hex_to_board(expected), 
-            test_helpers::hex_to_board(actual), 
         );
 
-        // Test E8 (edge)
-        let expected = 0x3838000000000000;
-        let actual = king_attack_patterns[Square::E8 as usize];
-        assert_eq!(
+        test_bitboard_eq!(
+            "King attack pattern for E8 (edge)",
+            fen_to_hex("3KKK2/3KKK2/8/8/8/8/8/8 w - - 0 1"),
             king_attack_patterns[Square::E8 as usize],
-            expected,
-            "King attack pattern for E8 is incorrect. Expected: {} Actual: {}",
-            test_helpers::hex_to_board(expected), 
-            test_helpers::hex_to_board(actual), 
         );
     }
 }

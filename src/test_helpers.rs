@@ -8,7 +8,7 @@ pub fn fen_to_hex(fen: &str) -> u64 {
     let mut result = 0;
     let mut shift = 63;
     for rank in ranks {
-        // reverse the string 
+        // reverse the string
         let rank: String = rank.chars().rev().collect();
         for c in rank.chars() {
             if c.is_numeric() {
@@ -16,9 +16,9 @@ pub fn fen_to_hex(fen: &str) -> u64 {
                 if n > shift {
                     break;
                 }
-                shift -= c.to_digit(10).unwrap(); 
+                shift -= c.to_digit(10).unwrap();
             } else {
-                result |= (1 << shift);
+                result |= 1 << shift;
                 if shift == 0 {
                     break;
                 }
@@ -44,3 +44,23 @@ pub fn hex_to_board(hex: u64) -> String {
     }
     rv
 }
+
+#[cfg(test)]
+#[macro_export]
+macro_rules! test_bitboard_eq {
+    ($test_name:expr, $expected:expr, $actual:expr $(,)?) => {{
+        let expected = $expected;
+        let actual = $actual;
+        assert_eq!(
+            expected,
+            actual,
+            "Test '{}' failed:\nExpected:{}\nActual:{}",
+            $test_name,
+            hex_to_board(expected),
+            hex_to_board(actual)
+        );
+    }};
+}
+
+#[cfg(test)]
+pub(crate) use test_bitboard_eq;
