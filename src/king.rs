@@ -1,11 +1,22 @@
-use crate::Square;
+use crate::masks;
 
+/*
+ * Shifting left goes up a file, i.e. A -> B file. But when in H file that wraps 
+ * it back into the A file, so when shifting left we need to mask out the A file.
+ * And visa-versa for shifting right.
+ */
 pub fn init() -> Vec<u64> {
     let mut rv = Vec::with_capacity(64);
     let mut mask: u64 = 1;
     for _ in 0..64 {
-        let n = mask | (mask << 1) | (mask >> 1);
+        // 0 0 0 0 1 0 0 0 => 0 0 0 1 1 1 0 0
+        let n = mask | ((mask << 1) & masks::NOT_A_FILE) | ((mask >> 1) & masks::NOT_H_FILE);
+
+        // 0 0 0 0 0 0 0 0    0 0 0 1 1 1 0 0
+        // 0 0 0 1 1 1 0 0 => 0 0 0 1 1 1 0 0
+        // 0 0 0 0 0 0 0 0 => 0 0 0 1 1 1 0 0
         let n = n | (n << 8) | (n >> 8);
+
         rv.push(n);
         mask <<= 1;
     }
@@ -15,6 +26,7 @@ pub fn init() -> Vec<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Square;
     use crate::test_helpers;
     
     #[test]

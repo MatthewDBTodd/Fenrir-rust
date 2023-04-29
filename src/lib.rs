@@ -4,6 +4,7 @@ pub mod bitboard;
 pub mod board;
 pub mod king;
 pub mod test_helpers;
+pub mod masks;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Colour {
