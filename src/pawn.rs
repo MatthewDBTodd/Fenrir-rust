@@ -18,14 +18,14 @@ impl PawnAttackTable {
         let mut mask: u64 = 1;
         for i in 0..64 {
             // double white push
-            if 8 <= i && i < 16 {
+            if (8..16).contains(&i) {
                 w_moves.push(mask | north!(mask, 1) | north!(mask, 2));
             } else {
                 w_moves.push(mask | north!(mask, 1));
             }
 
             // double black push
-            if 48 <= i && i < 56 {
+            if (48..56).contains(&i) {
                 b_moves.push(mask | south!(mask, 1) | south!(mask, 2));
             } else {
                 b_moves.push(mask | south!(mask, 1));

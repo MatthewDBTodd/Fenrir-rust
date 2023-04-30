@@ -10,8 +10,8 @@ struct PieceColour(Piece, Colour);
 pub struct BitBoard {
     // indexed by colour, i.e. white = 0, black = 1
     pub colours: [u64; 2],
-    // indexed by colour, then piece as per the order in the Piece enum
-    pub pieces: [[u64; 6]; 2],
+    // indexed by piece as per the order in the Piece enum
+    pub pieces: [u64; 6],
 }
 
 impl TryFrom<&str> for BitBoard {
@@ -50,20 +50,24 @@ impl TryFrom<&str> for BitBoard {
 impl BitBoard {
     pub fn place_piece(&mut self, colour: Colour, piece: Piece, square: Square) {
         let square_mask = get_square_mask(square);
+
         debug_assert_eq!(self.get_entire_mask() & square_mask, 0);
-        let piece_mask = self.get_piece_mask(colour, piece) | square_mask;
-        self.set_piece_mask(colour, piece, piece_mask);
+
+        let piece_mask = self.get_piece_mask(piece) | square_mask;
+        self.set_piece_mask(piece, piece_mask);
         let colour_mask = self.get_colour_mask(colour) | square_mask;
         self.set_colour_mask(colour, colour_mask);
     }
 
     pub fn remove_piece(&mut self, colour: Colour, piece: Piece, square: Square) {
         let square_mask = get_square_mask(square);
-        let piece_mask = self.get_piece_mask(colour, piece);
+        let piece_mask = self.get_piece_mask(piece);
         let colour_mask = self.get_colour_mask(colour);
+
         debug_assert_ne!(piece_mask & square_mask, 0);
         debug_assert_ne!(colour_mask & square_mask, 0);
-        self.set_piece_mask(colour, piece, piece_mask ^ square_mask);
+
+        self.set_piece_mask(piece, piece_mask ^ square_mask);
         self.set_colour_mask(colour, colour_mask ^ square_mask);
     }
 
@@ -71,12 +75,16 @@ impl BitBoard {
         get_square_mask(square) & self.get_entire_mask() == 0
     }
 
-    pub fn get_piece_mask(&self, colour: Colour, piece: Piece) -> u64 {
-        self.pieces[colour as usize][piece as usize]
+    pub fn get_piece_mask(&self, piece: Piece) -> u64 {
+        self.pieces[piece as usize]
     }
 
-    pub fn set_piece_mask(&mut self, colour: Colour, piece: Piece, mask: u64) {
-        self.pieces[colour as usize][piece as usize] = mask;
+    pub fn set_piece_mask(&mut self, piece: Piece, mask: u64) {
+        self.pieces[piece as usize] = mask;
+    }
+
+    pub fn get_colour_piece_mask(&self, piece: Piece, colour: Colour) -> u64 {
+        self.get_piece_mask(piece) & self.get_colour_mask(colour)
     }
 
     pub fn get_colour_mask(&self, colour: Colour) -> u64 {
@@ -91,23 +99,26 @@ impl BitBoard {
         self.get_colour_mask(Colour::White) | self.get_colour_mask(Colour::Black)
     }
 
-    pub fn get_colour_piece_masks(&self, colour: Colour) -> [u64; 6] {
-        self.pieces[colour as usize]
+    pub fn get_piece_masks(&self) -> [u64; 6] {
+        self.pieces
     }
 
     pub fn get_square_char(&self, square: Square) -> char {
         let square_mask = get_square_mask(square);
-        let colour = if square_mask & self.get_colour_mask(Colour::White) > 0 {
-            Colour::White
-        } else if square_mask & self.get_colour_mask(Colour::Black) > 0 {
-            Colour::Black
+        let white_mask = self.get_colour_mask(Colour::White);
+        let black_mask = self.get_colour_mask(Colour::Black);
+        let (colour, colour_mask) = if square_mask & white_mask > 0 {
+            (Colour::White, white_mask)
+        } else if square_mask & black_mask > 0 {
+            (Colour::Black, black_mask)
         } else {
             return ' ';
         };
-        let piece_masks = self.get_colour_piece_masks(colour);
+        let piece_masks = self.get_piece_masks();
         let piece = 'outer: loop {
             for (i, mask) in piece_masks.iter().enumerate() {
-                if square_mask & mask != 0 {
+                let piece_colour_mask = mask & colour_mask;
+                if square_mask & piece_colour_mask != 0 {
                     break 'outer Piece::from(i);
                 }
             }
@@ -210,6 +221,7 @@ impl fmt::Debug for BitBoard {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -231,19 +243,19 @@ mod tests {
         bitboard.place_piece(Colour::Black, Piece::Queen, Square::H8);
 
         assert_eq!(
-            bitboard.get_piece_mask(Colour::White, Piece::King),
+            bitboard.get_colour_piece_mask(Piece::King, Colour::White),
             1u64 << (Square::E1 as u32)
         );
         assert_eq!(
-            bitboard.get_piece_mask(Colour::White, Piece::Rook),
+            bitboard.get_colour_piece_mask(Piece::Rook, Colour::White),
             1u64 << (Square::H1 as u32)
         );
         assert_eq!(
-            bitboard.get_piece_mask(Colour::Black, Piece::Pawn),
+            bitboard.get_colour_piece_mask(Piece::Pawn, Colour::Black),
             1u64 << (Square::A7 as u32)
         );
         assert_eq!(
-            bitboard.get_piece_mask(Colour::Black, Piece::Queen),
+            bitboard.get_colour_piece_mask(Piece::Queen, Colour::Black),
             1u64 << (Square::H8 as u32)
         );
         assert_eq!(
@@ -268,9 +280,18 @@ mod tests {
         bitboard.remove_piece(Colour::Black, Piece::Pawn, Square::A7);
         bitboard.remove_piece(Colour::White, Piece::Rook, Square::H1);
 
-        assert_eq!(bitboard.get_piece_mask(Colour::White, Piece::King), 0);
-        assert_eq!(bitboard.get_piece_mask(Colour::Black, Piece::Pawn), 0);
-        assert_eq!(bitboard.get_piece_mask(Colour::White, Piece::Rook), 0);
+        assert_eq!(
+            bitboard.get_colour_piece_mask(Piece::King, Colour::White),
+            0
+        );
+        assert_eq!(
+            bitboard.get_colour_piece_mask(Piece::Pawn, Colour::Black),
+            0
+        );
+        assert_eq!(
+            bitboard.get_colour_piece_mask(Piece::Rook, Colour::White),
+            0
+        );
         assert_eq!(bitboard.get_colour_mask(Colour::White), 0);
         assert_eq!(bitboard.get_colour_mask(Colour::Black), 0);
     }

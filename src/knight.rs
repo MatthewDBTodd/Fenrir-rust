@@ -1,6 +1,6 @@
 use crate::masks::*;
 
-fn init() -> Vec<u64> {
+pub fn init() -> Vec<u64> {
     let mut rv = Vec::with_capacity(64);
     let mut mask: u64 = 1;
     for _ in 0..64 {

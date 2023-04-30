@@ -1,9 +1,10 @@
 use crate::bitboard::*;
-use crate::{Colour, Move, Piece, Square};
+use crate::{Colour, Move, Square};
 
 use std::fmt;
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct Board {
     bitboard: BitBoard,
     turn_colour: Colour,
@@ -148,6 +149,7 @@ impl fmt::Display for Board {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Piece;
 
     #[test]
     fn test_fen_initial_position() {
@@ -180,51 +182,75 @@ mod tests {
             0xFF_FF_00_00_00_00_00_00
         );
         assert_eq!(
-            board.bitboard.get_piece_mask(Colour::White, Piece::Pawn),
+            board
+                .bitboard
+                .get_colour_piece_mask(Piece::Pawn, Colour::White),
             0x00_00_00_00_00_00_FF_00
         );
         assert_eq!(
-            board.bitboard.get_piece_mask(Colour::Black, Piece::Pawn),
+            board
+                .bitboard
+                .get_colour_piece_mask(Piece::Pawn, Colour::Black),
             0x00_FF_00_00_00_00_00_00
         );
         assert_eq!(
-            board.bitboard.get_piece_mask(Colour::White, Piece::King),
+            board
+                .bitboard
+                .get_colour_piece_mask(Piece::King, Colour::White),
             0x00_00_00_00_00_00_00_10
         );
         assert_eq!(
-            board.bitboard.get_piece_mask(Colour::Black, Piece::King),
+            board
+                .bitboard
+                .get_colour_piece_mask(Piece::King, Colour::Black),
             0x10_00_00_00_00_00_00_00
         );
         assert_eq!(
-            board.bitboard.get_piece_mask(Colour::White, Piece::Queen),
+            board
+                .bitboard
+                .get_colour_piece_mask(Piece::Queen, Colour::White),
             0x00_00_00_00_00_00_00_08
         );
         assert_eq!(
-            board.bitboard.get_piece_mask(Colour::Black, Piece::Queen),
+            board
+                .bitboard
+                .get_colour_piece_mask(Piece::Queen, Colour::Black),
             0x08_00_00_00_00_00_00_00
         );
         assert_eq!(
-            board.bitboard.get_piece_mask(Colour::White, Piece::Rook),
+            board
+                .bitboard
+                .get_colour_piece_mask(Piece::Rook, Colour::White),
             0x00_00_00_00_00_00_00_81
         );
         assert_eq!(
-            board.bitboard.get_piece_mask(Colour::Black, Piece::Rook),
+            board
+                .bitboard
+                .get_colour_piece_mask(Piece::Rook, Colour::Black),
             0x81_00_00_00_00_00_00_00
         );
         assert_eq!(
-            board.bitboard.get_piece_mask(Colour::White, Piece::Knight),
+            board
+                .bitboard
+                .get_colour_piece_mask(Piece::Knight, Colour::White),
             0x00_00_00_00_00_00_00_42
         );
         assert_eq!(
-            board.bitboard.get_piece_mask(Colour::Black, Piece::Knight),
+            board
+                .bitboard
+                .get_colour_piece_mask(Piece::Knight, Colour::Black),
             0x42_00_00_00_00_00_00_00
         );
         assert_eq!(
-            board.bitboard.get_piece_mask(Colour::White, Piece::Bishop),
+            board
+                .bitboard
+                .get_colour_piece_mask(Piece::Bishop, Colour::White),
             0x00_00_00_00_00_00_00_24
         );
         assert_eq!(
-            board.bitboard.get_piece_mask(Colour::Black, Piece::Bishop),
+            board
+                .bitboard
+                .get_colour_piece_mask(Piece::Bishop, Colour::Black),
             0x24_00_00_00_00_00_00_00
         );
     }

@@ -41,6 +41,7 @@ pub enum Square {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 struct Move {
     source_sq: Square,
     dest_sq: Square,
