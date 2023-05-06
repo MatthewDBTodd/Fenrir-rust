@@ -6,8 +6,9 @@ pub mod king;
 pub mod knight;
 pub mod masks;
 pub mod pawn;
+pub mod sliding_piece;
 
-#[cfg(test)]
+// #[cfg(test)]
 pub mod test_helpers;
 
 #[derive(Debug, Clone, Copy, PartialEq)]

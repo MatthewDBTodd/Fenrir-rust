@@ -29,7 +29,7 @@ pub fn fen_to_hex(fen: &str) -> u64 {
     result
 }
 
-#[cfg(test)]
+// #[cfg(test)]
 pub fn hex_to_board(hex: u64) -> String {
     let mut rv = String::new();
     writeln!(&mut rv).unwrap();

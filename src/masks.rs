@@ -27,98 +27,98 @@ macro_rules! south {
 #[macro_export]
 macro_rules! east {
     ($value:expr, $shift_amount:expr) => {
-        $value << $shift_amount
+        ($value << $shift_amount) & NOT_A_FILE
     };
 }
 
 #[macro_export]
 macro_rules! west {
     ($value:expr, $shift_amount:expr) => {
-        $value >> $shift_amount
+        $value >> $shift_amount & NOT_H_FILE
     };
 }
 
 #[macro_export]
 macro_rules! north_east {
     ($value:expr) => {
-        $value << 9
+        ($value << 9) & NOT_A_FILE
     };
 }
 
 #[macro_export]
 macro_rules! north_west {
     ($value:expr) => {
-        $value << 7
+        ($value << 7) & NOT_H_FILE
     };
 }
 
 #[macro_export]
 macro_rules! south_east {
     ($value:expr) => {
-        $value >> 7
+        ($value >> 7) & NOT_A_FILE
     };
 }
 
 #[macro_export]
 macro_rules! south_west {
     ($value:expr) => {
-        $value >> 9
+        ($value >> 9) & NOT_H_FILE
     };
 }
 
 #[macro_export]
 macro_rules! north_north_east {
     ($value:expr) => {
-        $value << 17
+        ($value << 17) & NOT_A_FILE
     };
 }
 
 #[macro_export]
 macro_rules! north_north_west {
     ($value:expr) => {
-        $value << 15
+        ($value << 15) & NOT_H_FILE
     };
 }
 
 #[macro_export]
 macro_rules! north_east_east {
     ($value:expr) => {
-        $value << 10
+        ($value << 10) & NOT_A_B_FILE
     };
 }
 
 #[macro_export]
 macro_rules! north_west_west {
     ($value:expr) => {
-        $value << 6
+        ($value << 6) & NOT_G_H_FILE
     };
 }
 
 #[macro_export]
 macro_rules! south_south_east {
     ($value:expr) => {
-        $value >> 15
+        ($value >> 15) & NOT_A_FILE
     };
 }
 
 #[macro_export]
 macro_rules! south_south_west {
     ($value:expr) => {
-        $value >> 17
+        ($value >> 17) & NOT_H_FILE
     };
 }
 
 #[macro_export]
 macro_rules! south_east_east {
     ($value:expr) => {
-        $value >> 6
+        ($value >> 6) & NOT_A_B_FILE
     };
 }
 
 #[macro_export]
 macro_rules! south_west_west {
     ($value:expr) => {
-        $value >> 10
+        ($value >> 10) & NOT_G_H_FILE
     };
 }
 

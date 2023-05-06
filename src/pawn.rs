@@ -19,25 +19,25 @@ impl PawnAttackTable {
         for i in 0..64 {
             // double white push
             if (8..16).contains(&i) {
-                w_moves.push(mask | north!(mask, 1) | north!(mask, 2));
+                w_moves.push(north!(mask, 1) | north!(mask, 2));
             } else {
-                w_moves.push(mask | north!(mask, 1));
+                w_moves.push(north!(mask, 1));
             }
 
             // double black push
             if (48..56).contains(&i) {
-                b_moves.push(mask | south!(mask, 1) | south!(mask, 2));
+                b_moves.push(south!(mask, 1) | south!(mask, 2));
             } else {
-                b_moves.push(mask | south!(mask, 1));
+                b_moves.push(south!(mask, 1));
             }
 
             // white attacks
             w_attacks
-                .push(mask | (north_east!(mask) & NOT_A_FILE) | (north_west!(mask) & NOT_H_FILE));
+                .push(north_east!(mask) | north_west!(mask));
 
             // black attacks
             b_attacks
-                .push(mask | (south_east!(mask) & NOT_A_FILE) | (south_west!(mask) & NOT_H_FILE));
+                .push(south_east!(mask) | south_west!(mask));
 
             mask <<= 1;
         }
@@ -78,61 +78,61 @@ mod tests {
 
         test_bitboard_eq!(
             "White pawn moves from E2 (single and double push)",
-            fen_to_hex("8/8/8/8/4P3/4P3/4P3/8 w - - 0 1"),
+            fen_to_hex("8/8/8/8/4N3/4N3/8/8 w - - 0 1"),
             pawn_attack_table.get_moves(Square::E2, Colour::White),
         );
 
         test_bitboard_eq!(
             "Black pawn moves from D7 (single and double push)",
-            fen_to_hex("8/3P4/3P4/3P4/8/8/8/8 w - - 0 1"),
+            fen_to_hex("8/8/3N4/3N4/8/8/8/8 w - - 0 1"),
             pawn_attack_table.get_moves(Square::D7, Colour::Black),
         );
 
         test_bitboard_eq!(
             "Black pawn moves from E2",
-            fen_to_hex("8/8/8/8/8/8/4P3/4P3 w - - 0 1"),
+            fen_to_hex("8/8/8/8/8/8/8/4N3 w - - 0 1"),
             pawn_attack_table.get_moves(Square::E2, Colour::Black),
         );
 
         test_bitboard_eq!(
             "White pawn moves from D7",
-            fen_to_hex("3P4/3P4/8/8/8/8/8/8 w - - 0 1"),
+            fen_to_hex("3N4/8/8/8/8/8/8/8 w - - 0 1"),
             pawn_attack_table.get_moves(Square::D7, Colour::White),
         );
 
         test_bitboard_eq!(
             "White pawn attacks from D2",
-            fen_to_hex("8/8/8/8/8/2P1P3/3P4/8 w - - 0 1"),
+            fen_to_hex("8/8/8/8/8/2N1N3/8/8 w - - 0 1"),
             pawn_attack_table.get_attacks(Square::D2, Colour::White),
         );
 
         test_bitboard_eq!(
             "Black pawn attacks from D5",
-            fen_to_hex("8/8/8/3P4/2P1P3/8/8/8 w - - 0 1"),
+            fen_to_hex("8/8/8/8/2N1N3/8/8/8 w - - 0 1"),
             pawn_attack_table.get_attacks(Square::D5, Colour::Black),
         );
 
         test_bitboard_eq!(
             "White pawn attacks from A4 (edge)",
-            fen_to_hex("8/8/8/1P6/P7/8/8/8 w - - 0 1"),
+            fen_to_hex("8/8/8/1N6/8/8/8/8 w - - 0 1"),
             pawn_attack_table.get_attacks(Square::A4, Colour::White),
         );
 
         test_bitboard_eq!(
             "Black pawn attacks from A4 (edge)",
-            fen_to_hex("8/8/8/8/P7/1P6/8/8 w - - 0 1"),
+            fen_to_hex("8/8/8/8/8/1N6/8/8 w - - 0 1"),
             pawn_attack_table.get_attacks(Square::A4, Colour::Black),
         );
 
         test_bitboard_eq!(
             "White pawn attacks from H7 (edge)",
-            fen_to_hex("6P1/7P/8/8/8/8/8/8 w - - 0 1"),
+            fen_to_hex("6N1/8/8/8/8/8/8/8 w - - 0 1"),
             pawn_attack_table.get_attacks(Square::H7, Colour::White),
         );
 
         test_bitboard_eq!(
             "Black pawn attacks from H7 (edge)",
-            fen_to_hex("8/7P/6P1/8/8/8/8/8 w - - 0 1"),
+            fen_to_hex("8/8/6N1/8/8/8/8/8 w - - 0 1"),
             pawn_attack_table.get_attacks(Square::H7, Colour::Black),
         );
     }
