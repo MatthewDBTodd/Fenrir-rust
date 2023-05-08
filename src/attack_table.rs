@@ -34,21 +34,57 @@ impl AttackTable {
         }
     }
     
-    fn get_piece_attacks(&self, piece: Piece, source_sq_mask: u64, occupied: u64) -> u64 {
+    // For a given piece type and a bitmask of a single source square, return
+    // a bitmask of all the squares that piece attacks
+    fn get_single_piece_attacks(
+            &self, 
+            piece: Piece, 
+            colour: Colour, 
+            source_sq_mask: u64, 
+            occupied: u64) -> u64 {
+
         // should only be 1 bit set
         debug_assert!(source_sq_mask.is_power_of_two());
 
         let idx = source_sq_mask.trailing_zeros() as usize;
         match piece {
+            Piece::Pawn => self.pawn_attacks[colour as usize][idx],
             Piece::King => self.king[idx],
             Piece::Knight => self.knight[idx],
             Piece::Bishop => self.bishop_attacks[idx].get_attacks(occupied),
             Piece::Rook => self.rook_attacks[idx].get_attacks(occupied),
             Piece::Queen => self.bishop_attacks[idx].get_attacks(occupied) 
                             | self.rook_attacks[idx].get_attacks(occupied),
-            Piece::Pawn => panic!("Use a separate function for pawn moves"), 
         }
     }
+    
+    // For a given piece type and a bitmask of all its source squares, return
+    // a bitmask of all the squares those pieces attack
+    fn get_all_piece_attacks(
+            &self, 
+            piece: Piece, 
+            colour: Colour, 
+            piece_mask: u64, 
+            occupied: u64) -> u64 {
+
+        let mut piece_mask = piece_mask;
+        let mut rv: u64 = 0;
+        while piece_mask != 0 {
+            // single out the least significant bit
+            let source_sq_mask = piece_mask & piece_mask.wrapping_neg();
+            
+            rv |= self.get_single_piece_attacks(
+                piece, 
+                colour, 
+                source_sq_mask, 
+                occupied
+            );
+            // remove the least significant bit for the next iteration
+            piece_mask ^= source_sq_mask;
+        } 
+        rv
+    }
+    
     /*
      * To find pinned pieces:
      * for each sliding piece, loop through each ray direction individually
@@ -203,13 +239,23 @@ impl AttackTable {
                 let source_square = piece_mask & piece_mask.wrapping_neg();
                 
                 // get the full attacks for that piece on the source square
-                let piece_att_squares = self.get_piece_attacks(piece, source_square, kingless_mask);
+                let piece_att_squares = self.get_single_piece_attacks(
+                    piece, 
+                    opposite_colour, 
+                    source_square, 
+                    kingless_mask
+                );
                 
                 // add to danger squares
                 danger_squares |= piece_att_squares;
                 
                 // get the full attacks for the piece if it was on the king square
-                let king_att_squares = self.get_piece_attacks(piece, king_mask, kingless_mask);
+                let king_att_squares = self.get_single_piece_attacks(
+                    piece, 
+                    opposite_colour, 
+                    king_mask, 
+                    kingless_mask
+                );
                 
                 let piece_idx = source_square.trailing_zeros() as usize;
 
@@ -246,38 +292,14 @@ impl AttackTable {
         // We now have the completed mask for pinned pieces, and have partially done the danger
         // squares with the pinned pieces. Now need to complete the danger squares with king, pawn,
         // and knight attacks
-        let mut knight_squares = bitboard.get_colour_piece_mask(Piece::Knight, opposite_colour);
-        
-        while knight_squares != 0 {
-            let source_square = knight_squares & knight_squares.wrapping_neg();
-            
-            let idx = source_square.trailing_zeros() as usize;
-            danger_squares |= self.knight[idx];
-
-            knight_squares ^= source_square;
-        }
-        
-        let mut king_squares = bitboard.get_colour_piece_mask(Piece::King, opposite_colour);
-
-        while king_squares != 0 {
-            let source_square = king_squares & king_squares.wrapping_neg();
-
-            let idx = source_square.trailing_zeros() as usize;
-            danger_squares |= self.king[idx];
-
-            king_squares ^= source_square;
-        }
-        
-        let mut pawn_squares = bitboard.get_colour_piece_mask(Piece::Pawn, opposite_colour);
-
-        while pawn_squares != 0 {
-            let source_square = pawn_squares & pawn_squares.wrapping_neg();
-            
-            let idx = source_square.trailing_zeros() as usize;
-
-            danger_squares |= self.pawn_attacks[opposite_colour as usize][idx];
-            
-            pawn_squares ^= source_square;
+        for piece in [Piece::Pawn, Piece::King, Piece::Knight] {
+            let source_squares = bitboard.get_colour_piece_mask(piece, opposite_colour);
+            danger_squares |= self.get_all_piece_attacks(
+                piece, 
+                opposite_colour, 
+                source_squares, 
+                kingless_mask
+            );
         }
 
         BoardStatus {
