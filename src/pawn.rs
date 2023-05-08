@@ -46,10 +46,12 @@ impl PawnAttackTable {
         }
     }
 
+    #[cfg(test)]
     pub fn get_moves(&self, square: Square, colour: Colour) -> u64 {
         self.moves[colour as usize][square as usize]
     }
 
+    #[cfg(test)]
     pub fn get_attacks(&self, square: Square, colour: Colour) -> u64 {
         self.attacks[colour as usize][square as usize]
     }
