@@ -11,6 +11,8 @@ struct PieceColour(Piece, Colour);
  * As a chess board has 64 squares, we can efficiently represent using a u64,
  * using minimal space and allows us to use very efficient bitwise operators.
  * 
+ * bit 0 is A1, bit 1 is B1, bit 2 is C1...bit 8 is A2, bit 9 is B2...bit 63 is H8
+ * 
  * Each piece has a u64 along with each colour, so if we want all white bishops
  * we AND the bishop mask with the white mask.
  */
