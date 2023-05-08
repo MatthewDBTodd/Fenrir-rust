@@ -535,6 +535,24 @@ mod tests {
             "Checking for black pinned pieces for 8/8/8/4k3/8/2r3P1/8/Q3R3",
             fen_to_hex("8/8/8/8/8/2r5/8/8 w - - 0 1"),
             board_status.pinned_pieces,
-        )
+        );
+            
+        let bitboard = BitBoard::try_from(
+            "8/4k3/3r4/4p3/4b3/Q5P1/8/4R3"
+        ).unwrap();
+        
+        let board_status = attack_table.get_board_status(&bitboard, Colour::Black);
+
+        test_bitboard_eq!(
+            "Checking for black danger squares for 8/4k3/3r4/4p3/4b3/Q5P1/8/4R3",
+            fen_to_hex("K7/K7/K2K4/K1K5/KK2KK1K/1KKKKKP1/KK2K3/KKKK1KKK w - - 0 1"),
+            board_status.danger_squares,
+        );
+
+        test_bitboard_eq!(
+            "Checking for black pinned pieces for 8/4k3/3r4/4p3/4b3/Q5P1/8/4R3 and that two pieces blocking the king don't count as pinned",
+            fen_to_hex("8/8/3r4/8/8/8/8/8 w - - 0 1"),
+            board_status.pinned_pieces,
+        );
     }
 }
