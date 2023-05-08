@@ -130,4 +130,10 @@ board
 attack table 
 bitboard 
 
+generate legal moves for a given position:
+
+// generate danger squares and pinned pieces: done 
+// mask out pinned pieces 
+// for all pieces NOT pinned 
+
 

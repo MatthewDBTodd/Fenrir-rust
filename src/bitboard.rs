@@ -7,6 +7,13 @@ use std::fmt;
 struct PieceColour(Piece, Colour);
 
 #[derive(Default)]
+/*
+ * As a chess board has 64 squares, we can efficiently represent using a u64,
+ * using minimal space and allows us to use very efficient bitwise operators.
+ * 
+ * Each piece has a u64 along with each colour, so if we want all white bishops
+ * we AND the bishop mask with the white mask.
+ */
 pub struct BitBoard {
     // indexed by colour, i.e. white = 0, black = 1
     colours: [u64; 2],
@@ -14,6 +21,8 @@ pub struct BitBoard {
     pieces: [u64; 6],
 }
 
+// Used in the Fen string parsing by the Board. The bitboard handles the first
+// field with all the piece placements, the board handles the rest.
 impl TryFrom<&str> for BitBoard {
     type Error = &'static str;
 
@@ -28,6 +37,9 @@ impl TryFrom<&str> for BitBoard {
             rank_idx -= 8;
             let mut i = 0;
             for c in rank.chars() {
+                // The addition is how many squares we skip. If a piece is placed
+                // then it's just 1, but if there's a gap then Fen simply puts a 
+                // number with the number of squares to skip.
                 i += if c.is_alphabetic() {
                     let PieceColour(piece, colour) = PieceColour::try_from(c)?;
                     let square: Square = FromPrimitive::from_usize(rank_idx + i).unwrap();
@@ -48,6 +60,7 @@ impl TryFrom<&str> for BitBoard {
 }
 
 impl BitBoard {
+    // Unchecked. This function doesn't check if the square is empty in release builds
     pub fn place_piece(&mut self, colour: Colour, piece: Piece, square: Square) {
         let square_mask = get_square_mask(square);
 
@@ -103,6 +116,7 @@ impl BitBoard {
         self.pieces
     }
 
+    // Fen represents white pieces with uppercase and black with lowercase
     pub fn get_square_char(&self, square: Square) -> char {
         let square_mask = get_square_mask(square);
         let white_mask = self.get_colour_mask(Colour::White);
