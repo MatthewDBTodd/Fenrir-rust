@@ -2,10 +2,8 @@ use crate::masks::*;
 use crate::{Colour, Square};
 
 pub struct PawnAttackTable {
-    w_moves: Vec<u64>,
-    w_attacks: Vec<u64>,
-    b_moves: Vec<u64>,
-    b_attacks: Vec<u64>,
+    pub moves: [Vec<u64>; 2],
+    pub attacks: [Vec<u64>; 2],
 }
 
 impl PawnAttackTable {
@@ -43,27 +41,17 @@ impl PawnAttackTable {
         }
 
         PawnAttackTable {
-            w_moves,
-            w_attacks,
-            b_moves,
-            b_attacks,
+            moves: [w_moves, b_moves],
+            attacks: [w_attacks, b_attacks],
         }
     }
 
     pub fn get_moves(&self, square: Square, colour: Colour) -> u64 {
-        if colour == Colour::White {
-            self.w_moves[square as usize]
-        } else {
-            self.b_moves[square as usize]
-        }
+        self.moves[colour as usize][square as usize]
     }
 
     pub fn get_attacks(&self, square: Square, colour: Colour) -> u64 {
-        if colour == Colour::White {
-            self.w_attacks[square as usize]
-        } else {
-            self.b_attacks[square as usize]
-        }
+        self.attacks[colour as usize][square as usize]
     }
 }
 

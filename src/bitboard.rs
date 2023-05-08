@@ -9,9 +9,9 @@ struct PieceColour(Piece, Colour);
 #[derive(Default)]
 pub struct BitBoard {
     // indexed by colour, i.e. white = 0, black = 1
-    pub colours: [u64; 2],
+    colours: [u64; 2],
     // indexed by piece as per the order in the Piece enum
-    pub pieces: [u64; 6],
+    pieces: [u64; 6],
 }
 
 impl TryFrom<&str> for BitBoard {
@@ -71,11 +71,6 @@ impl BitBoard {
         self.set_colour_mask(colour, colour_mask ^ square_mask);
     }
     
-    // colour arg is the colour to check for pinned pieces
-    pub fn get_pinned_squares(&self, colour: Colour) -> u64 {
-        0u64
-    }
-
     pub fn square_empty(&self, square: Square) -> bool {
         get_square_mask(square) & self.get_entire_mask() == 0
     }
@@ -326,28 +321,5 @@ mod tests {
         assert!(bitboard.square_empty(Square::E1));
         assert!(bitboard.square_empty(Square::A7));
         assert!(bitboard.square_empty(Square::H1));
-    }
-    
-    #[test]
-    fn test_pinned_pieces() {
-        let bitboard = BitBoard::try_from(
-            "r1bqkb1r/ppp2ppp/2np1n2/1B2p2Q/8/2N2N2/PPPP1PPP/R1B1R1K1"
-        ).unwrap(); 
-        
-        test_bitboard_eq!(
-            "Checking for black pinned pieces for r1bqkb1r/ppp2ppp/2np1n2/1B2p2Q/8/2N2N2/PPPP1PPP/R1B1R1K1",
-            fen_to_hex("8/5p2/2n5/4p3/8/8/8/8 w - - 0 1"),
-            bitboard.get_pinned_squares(Colour::Black),
-        );
-        
-        let bitboard = BitBoard::try_from(
-            "rnb1r1k1/pppp1ppp/5n2/8/1b5q/2N2PP1/PPPPP2P/R1BQKBNR"
-        ).unwrap();
-
-        test_bitboard_eq!(
-            "Checking for white pinned pieces for rnb1r1k1/pppp1ppp/5n2/8/1b5q/2N2PP1/PPPPP2P/R1BQKBNR",
-            fen_to_hex("8/8/8/8/8/6P1/4P3/8 w - - 0 1"),
-            bitboard.get_pinned_squares(Colour::White),
-        );
     }
 }

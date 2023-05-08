@@ -33,6 +33,7 @@ impl Magic {
     }
 
     fn init_for_square(square_mask: u64, piece: Piece) -> Self {
+        debug_assert!(square_mask.is_power_of_two());
         // given a mask (with only a single bit set), to find its corresponding
         // index, simply use trailing zeros. e.g. 0b1000.trailing_zeros() returns 3.
         let square_index = square_mask.trailing_zeros() as usize;

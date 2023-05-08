@@ -7,6 +7,7 @@ pub mod knight;
 pub mod masks;
 pub mod pawn;
 pub mod sliding_piece;
+pub mod attack_table;
 
 // #[cfg(test)]
 pub mod test_helpers;

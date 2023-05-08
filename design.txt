@@ -83,5 +83,51 @@ is pinned
 - for the king, still do 
 - when doing en-passant, have to test for legality, but it's rare enough that it won't affect performance
 
+// returns a bitboard of squares that have a pinned piece
+// for this example, assumes it's white to move
+fn get_pinned_pieces()
+   get king mask 
+   get white bishop attack squares for the king square
+   for all bishops on opposing colour: 
+      get attack squares 
+      pinned_by_bishop = (white_bishop_attacks & black_bishop_attacks) & white_bitboard
+   
+   // means we need to check for queen diagonal pins too, if we already found a diagonal pin we 
+   // don't need to check for queen diagonal pins because they'll be on the same diagonal
+   if NOT found a bishop pin:
+      for all queens on opposing colour:
+         get bishop attack squares from that queen square 
+         pinned_by_queen = (white_bishop_attacks & black_queen_bishop_attacks) & white_bitboard 
+
+   then do the same for the rook
+   
+this is flawed, sliding pieces are calculated for all directions at once, meaning 
+the board 8/4b3/8/2R5/8/4K3/8/8 w - - 0 1 will show the rook as pinned as both the 
+bishop and the bishop on the king square attack it, even though they're on different
+diagonals. 
+can check if it's a genuine pin if the bishops mask overlaps with the king?
+actually might be easier to just make constant bitmasks of sliding pieces including the edges 
+then for each sliding piece, check if the mask overlaps with the king, and if it does, return 
+mask & colour_mask 
+for each sliding piece:
+   for each direction
+      if ray intercepts king:
+         return ray & (colour_mask ^ king)
+         break (as once we have a pin on a ray direction all other pins will be the same)
+         
+for each sliding piece:
+   for each direction 
+      place sliding piece on king square 
+      if ray from king square intercepts an attacking sliding piece of same type (or queen):
+         return ray_mask & own_colour_mask - doesn't work as it'll mark two pieces on the same ray as pinned
+            - solution: a piece is only pinned if the ray_mask & own_colour_mask has a single bit set?
+         break (as once we have a pin on a ray direction all other pins will pin to the same piece)
+
+   
+maybe find if king is in check while calculating the pinned squares?
+
+board
+attack table 
+bitboard 
 
 
