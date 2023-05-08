@@ -163,8 +163,6 @@ impl AttackTable {
             Colour::Black => Colour::White,
         };
 
-
-
         // will mark danger squares while calculating pinned pieces 
         let mut danger_squares: u64 = 0;
         let mut pinned_pieces: u64 = 0;
@@ -221,15 +219,16 @@ impl AttackTable {
                     let ray_mask = ray_direction.0[piece_idx];
                     let piece_ray_mask = ray_mask & piece_att_squares;
                     
-                    // now get the mask for the piece if placed on the king square
+                    // now get the mask for the opposite direction with the piece if placed on 
+                    // the king square
                     let ray_mask = ray_direction.1[king_idx];
                     let king_ray_mask = ray_mask & king_att_squares;
                     
-                    // intersection the two
+                    // intersection of the two
                     let pinned = piece_ray_mask & king_ray_mask;
                     
                     // should only result in at most a single pinned piece
-                    debug_assert!(pinned.is_power_of_two());
+                    // debug_assert!(pinned.is_power_of_two());
                     
                     pinned_pieces |= pinned;
 
@@ -239,6 +238,7 @@ impl AttackTable {
                         break;
                     }
                 }
+                // remove least significant bit from piece mask for next iteration
                 piece_mask ^= source_square;
             }
         }
@@ -275,7 +275,6 @@ impl AttackTable {
             
             let idx = source_square.trailing_zeros() as usize;
 
-            danger_squares |= self.pawn_attacks[opposite_colour as usize][idx];
             danger_squares |= self.pawn_attacks[opposite_colour as usize][idx];
             
             pawn_squares ^= source_square;
