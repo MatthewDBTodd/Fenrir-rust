@@ -1,6 +1,9 @@
 use crate::masks::*;
 use crate::{Colour, Square};
 
+// Indexed by colour
+// Pawns are unique in as much as they have different attacks and movements
+// and their attacks/movements depend on their colour.
 pub struct PawnAttackTable {
     pub moves: [Vec<u64>; 2],
     pub attacks: [Vec<u64>; 2],

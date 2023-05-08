@@ -4,13 +4,25 @@ use rand::rngs::ThreadRng;
 use crate::masks::*;
 use crate::test_helpers::hex_to_board;
 
+/*
+ * attacks: a vector of size 2^n, where n is the number of set bits in the mask.
+ *          Holds attack masks for each permutation of blockers along the sliding piece rays.
+ *          For a given blocker permutation, it's multiplied by the magic then right shifted
+ *          by the shift which gets an index into this vector.
+ * magic:   The magic constant
+ * mask:    An attack mask for that particular square, taken from the arrays below.
+ *          The mask is without blockers, and has the edges of the board zeroed out,
+ *          as a blocker on the edge makes no difference to the sliding pieces movements
+ * shift:   The number of set bits in the mask.  
+ */
 pub struct Magic {
     attacks: Vec<u64>,
     magic: u64,
     shift: u8,
-    mask: u64
+    mask: u64 
 }
 
+// Apparently a random u64 with a small amount of set bits is preferable
 fn rand_sparse_u64(rng: &mut ThreadRng) -> u64 {
     rng.gen::<u64>() & rng.gen::<u64>() & rng.gen::<u64>()
 }
@@ -26,12 +38,68 @@ impl Magic {
         rv
     }
     
+    // This is the public function actually used to fetch the attack mask 
+    // for a given set of blockers
     pub fn get_attacks(&self, occupied_unmasked: u64) -> u64 {
+        // We only need occupied squares along the sliding piece attack rays, so
+        // mask the other squares out via the mask.
         let occupied_masked = occupied_unmasked & self.mask;
+        
+        // get the index into the attack table, based on the magic and blocker permutation
         let idx = get_index_from_blockers(occupied_masked, self.magic, self.shift);
         self.attacks[idx]
     }
 
+    /*
+     * This is essentially black magic, I don't really understand the details very well.
+     * See here: https://www.chessprogramming.org/Magic_Bitboards                       
+     * and here: https://www.chessprogramming.org/Looking_for_Magics
+     * 
+     * This is the general gist of how it works:
+     * 1. For each square, generate all permutations of blockers and corresponding attacks
+     *    e.g. a bishop on E4 with the following blockers:
+     *
+     *    8| 1 0 0 0 0 0 0 0
+     *    7| 0 0 0 0 0 0 0 0
+     *    6| 0 0 1 0 0 0 0 0
+     *    5| 0 0 0 0 0 0 0 0
+     *    4| 0 0 0 0 0 0 0 0
+     *    3| 0 0 0 0 0 1 0 0
+     *    2| 0 0 1 0 0 0 1 0
+     *    1| 0 0 0 0 0 0 0 1
+     *      ---------------
+     *       A B C D E F G H
+     *       
+     *    would generate the following attack mask:
+     * 
+     *    8| 0 0 0 0 0 0 0 0
+     *    7| 0 0 0 0 0 0 0 1
+     *    6| 0 0 1 0 0 0 1 0
+     *    5| 0 0 0 1 0 1 0 0
+     *    4| 0 0 0 0 0 0 0 0
+     *    3| 0 0 0 1 0 1 0 0
+     *    2| 0 0 1 0 0 0 0 0
+     *    1| 0 0 0 0 0 0 0 0
+     *      ---------------
+     *       A B C D E F G H
+     *    
+     *    i.e. with all squares up-to-and-including the first blocker set, with 
+     *    all behind that first blocker unset.
+     *    
+     * 2. With all the blockers permutations and their corresponding attacks
+     *    generated, it then becomes a matter of brute force trial and error
+     *    to find an appropriate magic value that works. The essential point is
+     *    that each blocker permutation can only collide with other permutations
+     *    that result in the same attack mask. If you get a collision with a 
+     *    permutation that results in a different attack mask, then that attempt
+     *    has failed, and you must start again.
+     * 
+     * 3. In a loop, generate a u64 with few set bits, then iterate through the
+     *    blockers and generate the index into the candidate attack vector through
+     *    the normal method i.e. (magic * blocker_mask) >> shift. If you iterate
+     *    through all permutations without any collisions then we have successfully
+     *    found a magic value that works.
+     */
     fn init_for_square(square_mask: u64, piece: Piece) -> Self {
         debug_assert!(square_mask.is_power_of_two());
         // given a mask (with only a single bit set), to find its corresponding
@@ -50,10 +118,14 @@ impl Magic {
         let permutations = gen_attacks(square_mask, raw_block_mask, piece);
         debug_assert!(permutations.attacks.len() == permutations.blockers.len());
 
+        // attacks is the candidate vector for now. Each element is set to 0 to
+        // represent an unused index.
         let mut attacks = vec![0; permutations.blockers.len()];
         let mut magic: u64;
         let mut rng = rand::thread_rng();
         let shift = (64 - raw_block_mask.count_ones()) as u8;
+        // As step 3 written above, just keep on trying til we find a magic with 
+        // no collisions
         loop {
             // generate random candidate magic number, apparently fewer bits is
             // better
@@ -65,11 +137,18 @@ impl Magic {
                     permutations.blockers[i], magic, shift);
                 debug_assert!(index < attacks.len());
                 
-                // unused index, can carry on
+                // Unused index, can carry on
                 if attacks[index] == 0 {
                     attacks[index] = permutations.attacks[i];
                 } 
-                // index already taken, fail and move on to next attempt
+                // Index already taken. if the attack mask already present matches
+                // our current one (i.e. a different blocker mask that results in
+                // the same attack mask) then we can carry on...                 
+                else if attacks[index] == permutations.attacks[i] {
+                    continue;
+                }
+                // ...otherwise it's a collision we can't deal with. Reset the candidate 
+                // attack vector and try again.
                 else {
                     attacks = vec![0; permutations.blockers.len()];
                     failed = true;
@@ -77,6 +156,7 @@ impl Magic {
                 }
             }    
             
+            // We found a working magic value, hooray!
             if !failed {
                 break;
             }
@@ -143,7 +223,7 @@ fn gen_attacks(square_mask: u64, raw_block_mask: u64, piece: Piece) -> SquareAtt
             Box::new(|n| {
                 south_west!(n)
             }),
-        // [7, 9, -9, -7]
+            // [7, 9, -9, -7]
         ]
     };
     
@@ -173,12 +253,10 @@ fn gen_attacks(square_mask: u64, raw_block_mask: u64, piece: Piece) -> SquareAtt
 // given a square, a piece, and a blocker-permutation-mask, calculate its attack
 // squares.
 fn gen_attack_squares_from_permutation(
-    square_mask: u64, 
-    directions: &[Box<dyn Fn(u64) -> u64>; 4], 
-    blocker_permutation: u64) -> u64 {
+        square_mask: u64, 
+        directions: &[Box<dyn Fn(u64) -> u64>; 4], 
+        blocker_permutation: u64) -> u64 {
 
-    // println!("-----------------------");
-    // println!("blockers = {}", hex_to_board(blocker_permutation));
     let mut result: u64 = 0;
     for dir_shift in directions {
         // tmp_mask is initially square mask
@@ -188,12 +266,6 @@ fn gen_attack_squares_from_permutation(
         // will also == 0.
         while tmp_mask != 0 {
             tmp_mask = dir_shift(tmp_mask);
-            // shift tmp_mask to the next square in the ray direction
-            // tmp_mask = if *dir_shift > 0 {
-            //     tmp_mask << dir_shift
-            // } else {
-            //     tmp_mask >> dir_shift.abs()
-            // };
             // Add the square to the result mask
             result |= tmp_mask;
             
@@ -204,7 +276,6 @@ fn gen_attack_squares_from_permutation(
             }
         }
     }
-    // println!("attacks = {}", hex_to_board(result));
     result
 }
 
