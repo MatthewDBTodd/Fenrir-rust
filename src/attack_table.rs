@@ -273,10 +273,14 @@ impl AttackTable {
                     // intersection of the two
                     let pinned = piece_ray_mask & king_ray_mask;
                     
-                    // should only result in at most a single pinned piece
-                    // debug_assert!(pinned.is_power_of_two());
-                    
-                    pinned_pieces |= pinned;
+                    // If there's no pieces in between the sliding piece and the king, 
+                    // i.e. the king is in check, this algorithm will incorrectly mark all the 
+                    // intermediate squares between the two as pinned, as the two opposite rays
+                    // overlap in all the intermediate squares. e.g. on the board
+                    // "8/8/8/4k3/8/2r3P1/8/Q3R3 w - - 0 1" it incorrectly marks E2, E3 and E4 as
+                    // "pinned". This next line removed those phantom pinned pieces by ANDing pinned
+                    // with the colour mask
+                    pinned_pieces |= pinned & bitboard.get_colour_mask(colour_to_move);
 
                     // means we have found a pinned piece for that piece, can skip the remaining
                     // ray directions as a piece can't pin a piece in multiple ray directions
@@ -514,5 +518,23 @@ mod tests {
             fen_to_hex("8/8/8/8/8/6P1/4P3/8 w - - 0 1"),
             board_status.pinned_pieces,
         );
+        
+        let bitboard = BitBoard::try_from(
+            "8/8/8/4k3/8/2r3P1/8/Q3R3"
+        ).unwrap();
+
+        let board_status = attack_table.get_board_status(&bitboard, Colour::Black);
+
+        test_bitboard_eq!(
+            "Checking for black danger squares for 8/8/8/4k3/8/2r3P1/8/Q3R3 and that they include squares behind the king",
+            fen_to_hex("Q3Q3/Q3Q3/Q3Q3/Q3Q3/Q3QQ1Q/Q1Q1Q3/QQ2Q3/QQQQQQQQ w - - 0 1"),
+            board_status.danger_squares,
+        );
+
+        test_bitboard_eq!(
+            "Checking for black pinned pieces for 8/8/8/4k3/8/2r3P1/8/Q3R3",
+            fen_to_hex("8/8/8/8/8/2r5/8/8 w - - 0 1"),
+            board_status.pinned_pieces,
+        )
     }
 }
