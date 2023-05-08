@@ -66,8 +66,6 @@ impl AttackTable {
      * The knight on C6 is pinned
      *
      * 1. Get the full attack mask for the bishop on B5:
-     * 
-     * 0 0 0 0 0 0 0 0 
      * 0 0 0 0 0 0 0 0 
      * 0 0 0 0 0 0 0 0 
      * 1 0 1 0 0 0 0 0 
@@ -75,10 +73,9 @@ impl AttackTable {
      * 1 0 1 0 0 0 0 0 
      * 0 0 0 1 0 0 0 0 
      * 0 0 0 0 1 0 0 0 
+     * 0 0 0 0 0 1 0 0 
      *
      * 2. Get the NE ray direction from the B5 square:
-     * 
-     * 0 0 0 1 0 0 0 0 
      * 0 0 0 0 1 0 0 0 
      * 0 0 0 1 0 0 0 0 
      * 0 0 1 0 0 0 0 0 
@@ -86,9 +83,9 @@ impl AttackTable {
      * 0 0 0 0 0 0 0 0 
      * 0 0 0 0 0 0 0 0 
      * 0 0 0 0 0 0 0 0 
+     * 0 0 0 0 0 0 0 0 
+     *
      * 3. AND the two together:
-     * 
-     * 0 0 0 0 0 0 0 0 
      * 0 0 0 0 0 0 0 0 
      * 0 0 0 0 0 0 0 0 
      * 0 0 1 0 0 0 0 0 
@@ -96,9 +93,9 @@ impl AttackTable {
      * 0 0 0 0 0 0 0 0 
      * 0 0 0 0 0 0 0 0 
      * 0 0 0 0 0 0 0 0 
+     * 0 0 0 0 0 0 0 0 
+     *
      * 4. Get the full attack mask for a bishop on the king square on E8:
-     * 
-     * 0 0 0 1 0 1 0 0 
      * 0 0 0 0 0 0 0 0 
      * 0 0 0 1 0 1 0 0 
      * 0 0 1 0 0 0 0 0 
@@ -106,9 +103,9 @@ impl AttackTable {
      * 0 0 0 0 0 0 0 0 
      * 0 0 0 0 0 0 0 0 
      * 0 0 0 0 0 0 0 0 
+     * 0 0 0 0 0 0 0 0 
+     *
      * 5. Get the SW ray direction (opposite of NE) from the E8 square:
-     * 
-     * 0 0 0 1 0 0 0 0 
      * 0 0 0 0 0 0 0 0 
      * 0 0 0 1 0 0 0 0 
      * 0 0 1 0 0 0 0 0 
@@ -116,33 +113,34 @@ impl AttackTable {
      * 1 0 0 0 0 0 0 0 
      * 0 0 0 0 0 0 0 0 
      * 0 0 0 0 0 0 0 0 
+     * 0 0 0 0 0 0 0 0 
+     *
      * 6. AND the two together:
      * 0 0 0 0 0 0 0 0 
      * 0 0 0 1 0 0 0 0 
-     * 0 0 0 0 0 0 0 0 
-     * 0 0 0 1 0 0 0 0 
      * 0 0 1 0 0 0 0 0 
      * 0 0 0 0 0 0 0 0 
      * 0 0 0 0 0 0 0 0 
      * 0 0 0 0 0 0 0 0 
      * 0 0 0 0 0 0 0 0 
+     * 0 0 0 0 0 0 0 0 
+     *
      * 7. Intersect the two resulting masks from steps 3 and 6:
      * 0 0 0 0 0 0 0 0 
      * 0 0 0 0 0 0 0 0 
-     * 0 0 0 0 0 0 0 0 
-     * 0 0 0 0 0 0 0 0 
      * 0 0 1 0 0 0 0 0 
      * 0 0 0 0 0 0 0 0 
      * 0 0 0 0 0 0 0 0 
      * 0 0 0 0 0 0 0 0 
      * 0 0 0 0 0 0 0 0 
+     * 0 0 0 0 0 0 0 0 
+     *
      * The resulting mask shows the piece on square C6 is pinned
      *
-     * We also need to generate all the danger squares so we can combine the calculation
-     *of pinned pieces with this for efficency, as we calculate the attack masks
-     * for the sliding pieces, we OR it with the danger squares bitboard. Then once
-     *night
-     * attacks to the danger bitboard.
+     * We also need to generate all the danger squares, so we can combine the calculation
+     * of pinned pieces with this for efficency, as we calculate the attack masks
+     * for the sliding pieces, we OR it with the danger squares bitboard. Then we
+     * add the attack squares for the king, knight and pawn to the danger bitboard
      */
 
     pub fn get_board_status(&self, bitboard: &BitBoard, colour_to_move: Colour) -> BoardStatus {
