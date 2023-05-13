@@ -302,6 +302,9 @@ impl AttackTable {
 
                     // means we have found a pinned piece for that piece, can skip the remaining
                     // ray directions as a piece can't pin a piece in multiple ray directions
+                    // Technically this could incorrectly break early due to the comment above,
+                    // but as that can only happen when the piece can have the king in check it 
+                    // can't pin a piece in one of the other ray directions anyway
                     if pinned != 0 {
                         break;
                     }
