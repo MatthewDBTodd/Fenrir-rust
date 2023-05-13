@@ -15,16 +15,17 @@ pub struct AttackTable {
     rook_attacks: Vec<Magic>,
 }
 
-// danger squares are attacked squares but also including rays behind the king
-// as they're used to show squares that would leave the king in check
-// also have a vector of individual pinned masks with their corresponding legal squares?
 pub struct BoardStatus {
+    // danger squares are attacked squares but also including rays behind the king
+    // as they're used to show squares that would leave the king in check
     danger_squares: u64,
+    // mask of all the pinned pieces
     pinned_pieces: u64,
     // Key is the u64 mask of a piece that is pinned to the king
     // value is the u64 mask of all the legal squares that piece can move to
+    // while not leaving the king in check
     pinned_legal_squares: HashMap<u64, u64>,
-    // a list of pairs where the first element is a bitmask of a piece putting
+    // a list of pairs where the first element is a bitmask of an enemy piece putting
     // the king in check, and the second value is a mask of all the squares that
     // a friendly piece can move to to block or capture the checking piece
     king_attacking_pieces: Vec<(u64, u64)>,
@@ -221,7 +222,7 @@ impl AttackTable {
         
         // as we're calculating pinned pieces for colour_to_move, we need to
         // iterate through the sliding pieces of the opposite colour
-        let opposite_colour = match colour_to_move {
+        let enemy_colour = match colour_to_move {
             Colour::White => Colour::Black,
             Colour::Black => Colour::White,
         };
@@ -263,7 +264,7 @@ impl AttackTable {
             };
             
             // get bitmasks of all pieces of that type
-            let mut piece_mask = bitboard.get_colour_piece_mask(piece, opposite_colour);
+            let mut piece_mask = bitboard.get_colour_piece_mask(piece, enemy_colour);
             
             // iterate through those pieces one by one
             while piece_mask != 0 {
@@ -273,7 +274,7 @@ impl AttackTable {
                 // get the full attacks for that piece on the source square
                 let piece_att_squares = self.get_single_piece_attacks(
                     piece, 
-                    opposite_colour, 
+                    enemy_colour, 
                     source_square, 
                     kingless_mask
                 );
@@ -284,7 +285,7 @@ impl AttackTable {
                 // get the full attacks for the piece if it was on the king square
                 let king_att_squares = self.get_single_piece_attacks(
                     piece, 
-                    opposite_colour, 
+                    enemy_colour, 
                     king_mask, 
                     kingless_mask
                 );
@@ -341,12 +342,12 @@ impl AttackTable {
         // squares with the pinned pieces. Now need to complete the danger squares with king, pawn,
         // and knight attacks
         for piece in [Piece::Pawn, Piece::King, Piece::Knight] {
-            let mut source_squares = bitboard.get_colour_piece_mask(piece, opposite_colour);
+            let mut source_squares = bitboard.get_colour_piece_mask(piece, enemy_colour);
             while source_squares != 0 {
                 let source_square = source_squares & source_squares.wrapping_neg();
                 let attacking_squares = self.get_single_piece_attacks(
                     piece, 
-                    opposite_colour, 
+                    enemy_colour, 
                     source_square, 
                     occupied
                 );
