@@ -1,4 +1,5 @@
 use std::ops::Index;
+use std::collections::HashMap;
 
 use crate::pawn::PawnAttackTable;
 use crate::sliding_piece::Magic;
@@ -16,9 +17,11 @@ pub struct AttackTable {
 
 // danger squares are attacked squares but also including rays behind the king
 // as they're used to show squares that would leave the king in check
+// also have a vector of individual pinned masks with their corresponding legal squares?
 pub struct BoardStatus {
     danger_squares: u64,
     pinned_pieces: u64,
+    pinned_legal_squares: HashMap<u64, u64>,
 }
 
 impl AttackTable {
@@ -220,6 +223,9 @@ impl AttackTable {
         // will mark danger squares while calculating pinned pieces 
         let mut danger_squares: u64 = 0;
         let mut pinned_pieces: u64 = 0;
+        // There can be maximum of 8 pieces pinned to the board at any one time
+        // i.e. one for each direction the king can move
+        let mut pinned_legal_squares: HashMap<u64, u64> = HashMap::with_capacity(8);
         
         for piece in [Piece::Bishop, Piece::Rook, Piece::Queen] {
             let ray_tables = match piece {
@@ -288,17 +294,16 @@ impl AttackTable {
                     let ray_mask = ray_direction.1[king_idx];
                     let king_ray_mask = ray_mask & king_att_squares;
                     
-                    // intersection of the two
-                    let pinned = piece_ray_mask & king_ray_mask;
-                    
+                    // intersection of the two 
                     // If there's no pieces in between the sliding piece and the king, 
                     // i.e. the king is in check, this algorithm will incorrectly mark all the 
                     // intermediate squares between the two as pinned, as the two opposite rays
                     // overlap in all the intermediate squares. e.g. on the board
                     // "8/8/8/4k3/8/2r3P1/8/Q3R3 w - - 0 1" it incorrectly marks E2, E3 and E4 as
-                    // "pinned". This next line removed those phantom pinned pieces by ANDing pinned
-                    // with the colour mask
-                    pinned_pieces |= pinned & bitboard.get_colour_mask(colour_to_move);
+                    // "pinned". The intersection with the colour mask removes that.
+                    let pinned = piece_ray_mask & king_ray_mask & bitboard.get_colour_mask(colour_to_move);
+                    
+                    pinned_pieces |= pinned;
 
                     // means we have found a pinned piece for that piece, can skip the remaining
                     // ray directions as a piece can't pin a piece in multiple ray directions
@@ -306,6 +311,11 @@ impl AttackTable {
                     // but as that can only happen when the piece can have the king in check it 
                     // can't pin a piece in one of the other ray directions anyway
                     if pinned != 0 {
+                        // The pinned piece can only move along the ray direction from the king to
+                        // the pinning piece (including capturing), so just union the two masks and
+                        // the source_square of the pinning piece as that hasn't been included in 
+                        // its attack mask
+                        pinned_legal_squares.insert(pinned, piece_ray_mask | king_ray_mask | source_square);
                         break;
                     }
                 }
@@ -330,6 +340,7 @@ impl AttackTable {
         BoardStatus {
             danger_squares,
             pinned_pieces,
+            pinned_legal_squares,
         }
     }
 }
@@ -499,15 +510,38 @@ const NORTH_WEST: [u64; 64] = [
 mod tests {
     use crate::test_helpers::*;
     use super::*;
+    use crate::Square;
+    
+    macro_rules! test_all_pinned_piece_legal_moves {
+        ($test_description:expr,
+         $pinned_pieces:expr,
+         $expected:expr,
+         $actual:expr $(,)?
+        ) => {{
+            let mut pinned_pieces = $pinned_pieces;
+            while pinned_pieces != 0 {
+                let pinned_piece = $pinned_pieces & pinned_pieces.wrapping_neg();
+                assert!($expected.contains_key(&pinned_piece));
+                assert!($actual.contains_key(&pinned_piece));
+
+                test_bitboard_eq!(
+                    $test_description,
+                    *$expected.get(&pinned_piece).unwrap(),
+                    *$actual.get(&pinned_piece).unwrap(),
+                );
+                pinned_pieces ^= pinned_piece;
+            }
+        }};
+    }
 
     #[test]
     #[ignore]
     fn test_board_status() {
         let attack_table = AttackTable::init();
+
         let bitboard = BitBoard::try_from(
             "r1bqkb1r/ppp2ppp/2np1n2/1B2p2Q/8/2N2N2/PPPP1PPP/R1B1R1K1"
         ).unwrap(); 
-        
         let board_status = attack_table.get_board_status(&bitboard, Colour::Black);
 
         test_bitboard_eq!(
@@ -522,10 +556,22 @@ mod tests {
             board_status.pinned_pieces,
         );
         
+        let mut expected_pinned_legal_squares: HashMap<u64, u64> = HashMap::with_capacity(3);
+        expected_pinned_legal_squares.insert(1 << Square::C6 as u32, fen_to_hex("8/3n4/2n5/1n6/8/8/8/8 w - - 0 1"));
+        expected_pinned_legal_squares.insert(1 << Square::F7 as u32, fen_to_hex("8/5p2/6p1/7p/8/8/8/8 w - - 0 1"));
+        expected_pinned_legal_squares.insert(1 << Square::E5 as u32, fen_to_hex("8/4p3/4p3/4p3/4p3/4p3/4p3/4p3 w - - 0 1"));
+
+        test_all_pinned_piece_legal_moves!(
+            "Checking the legal squares for each pinned piece for r1bqkb1r/ppp2ppp/2np1n2/1B2p2Q/8/2N2N2/PPPP1PPP/R1B1R1K1 w - - 0 1",
+            board_status.pinned_pieces,
+            expected_pinned_legal_squares,
+            board_status.pinned_legal_squares,
+        );
+        
+        // ---------------------------------
         let bitboard = BitBoard::try_from(
             "rnb1r1k1/pppp1ppp/5n2/8/1b5q/2N2PP1/PPPPP2P/R1BQKBNR"
         ).unwrap();
-        
         let board_status = attack_table.get_board_status(&bitboard, Colour::White);
         
         test_bitboard_eq!(
@@ -539,7 +585,19 @@ mod tests {
             fen_to_hex("8/8/8/8/8/6P1/4P3/8 w - - 0 1"),
             board_status.pinned_pieces,
         );
+
+        let mut expected_pinned_legal_squares: HashMap<u64, u64> = HashMap::with_capacity(2);
+        expected_pinned_legal_squares.insert(1 << Square::E2 as u32, fen_to_hex("4P3/4P3/4P3/4P3/4P3/4P3/4P3/8 w - - 0 1"));
+        expected_pinned_legal_squares.insert(1 << Square::G3 as u32, fen_to_hex("8/8/8/8/7P/6P1/5P2/8 w - - 0 1"));
         
+        test_all_pinned_piece_legal_moves!(
+            "Checking the legal squares for each pinned piece for rnb1r1k1/pppp1ppp/5n2/8/1b5q/2N2PP1/PPPPP2P/R1BQKBNR",
+            board_status.pinned_pieces,
+            expected_pinned_legal_squares,
+            board_status.pinned_legal_squares,
+        );
+        
+        // ---------------------------------
         let bitboard = BitBoard::try_from(
             "8/8/8/4k3/8/2r3P1/8/Q3R3"
         ).unwrap();
@@ -558,6 +616,17 @@ mod tests {
             board_status.pinned_pieces,
         );
             
+        let mut expected_pinned_legal_squares: HashMap<u64, u64> = HashMap::with_capacity(1);
+        expected_pinned_legal_squares.insert(1 << Square::C3 as u32, fen_to_hex("8/8/8/8/3r4/2r5/1r6/r7 w - - 0 1"));
+
+        test_all_pinned_piece_legal_moves!(
+            "Checking the legal squares for each pinned piece for 8/8/8/4k3/8/2r3P1/8/Q3R3",
+            board_status.pinned_pieces,
+            expected_pinned_legal_squares,
+            board_status.pinned_legal_squares,
+        );
+        
+        // ---------------------------------
         let bitboard = BitBoard::try_from(
             "8/4k3/3r4/4p3/4b3/Q5P1/8/4R3"
         ).unwrap();
@@ -574,6 +643,16 @@ mod tests {
             "Checking for black pinned pieces for 8/4k3/3r4/4p3/4b3/Q5P1/8/4R3 and that two pieces blocking the king don't count as pinned",
             fen_to_hex("8/8/3r4/8/8/8/8/8 w - - 0 1"),
             board_status.pinned_pieces,
+        );
+
+        let mut expected_pinned_legal_squares: HashMap<u64, u64> = HashMap::with_capacity(1);
+        expected_pinned_legal_squares.insert(1 << Square::D6 as u32, fen_to_hex("8/8/3r4/2r5/1r6/r7/8/8 w - - 0 1"));
+
+        test_all_pinned_piece_legal_moves!(
+            "Checking the legal squares for each pinned piece for 8/4k3/3r4/4p3/4b3/Q5P1/8/4R3",
+            board_status.pinned_pieces,
+            expected_pinned_legal_squares,
+            board_status.pinned_legal_squares,
         );
     }
 }
