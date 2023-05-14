@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
+use crate::board::Board;
 use crate::pawn::PawnAttackTable;
 use crate::sliding_piece::Magic;
-use crate::{king, knight, Piece, Colour, Square};
+use crate::{king, knight, Piece, Colour, Square, Move};
 use crate::bitboard::BitBoard;
 
 pub struct AttackTable {
@@ -55,11 +56,18 @@ impl AttackTable {
         }
     }
     
-    pub fn generate_legal_moves(&self, bitboard: BitBoard, colour_to_move: Colour,
-                                en_passant_square: Option<Square>) {
+    pub fn generate_legal_moves(&self, board: &Board, moves: &[Move; 256]) -> usize {
 
-        
-        todo!();
+        0usize 
+        // let board_status = self.get_board_status(&bitboard, colour_to_move);
+        // 
+        // let in_check = !board_status.king_attacking_pieces.is_empty();
+        // 
+        // if in_check {
+        //     // if in double check, just generate king moves
+
+        //     // otherwise    
+        // }
     }
     
     // For a given piece type and a bitmask of a single source square, return

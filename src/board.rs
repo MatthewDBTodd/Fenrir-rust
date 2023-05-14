@@ -43,6 +43,14 @@ impl Board {
             board_hash: 0,
         })
     }
+    
+    pub fn make_move(&mut self, move_: Move) {
+        
+    }
+    
+    pub fn undo_move(&mut self) {
+        
+    }
 }
 
 impl Default for Board {

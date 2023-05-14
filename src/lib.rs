@@ -42,9 +42,9 @@ pub enum Square {
     A8, B8, C8, D8, E8, F8, G8, H8,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 #[allow(dead_code)]
-struct Move {
+pub struct Move {
     source_sq: Square,
     dest_sq: Square,
     piece: Piece,
@@ -60,7 +60,20 @@ pub enum MoveType {
     CastleQueenSide,
     MovePromotion(Piece),
     CapturePromotion(Piece),
+    ErrorMove,
 }
+
+impl Default for Move {
+    fn default() -> Self {
+        Self {
+            source_sq: Square::A1,
+            dest_sq: Square::A1,
+            piece: Piece::Pawn,
+            move_type: MoveType::ErrorMove,
+        }
+    }    
+}
+
 
 impl TryFrom<&str> for Colour {
     type Error = &'static str;
