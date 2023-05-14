@@ -137,3 +137,20 @@ generate legal moves for a given position:
 // for all pieces NOT pinned 
 
 
+generating pieces that can cause a discovered check is simply a union of pinned 
+pieces with their own colour 
+when generating moves for a discovered check, have to make sure the piece isn't itself 
+pinned to its own king 
+want to also generate double checks
+
+additional moves types?: in rough order of strength (strongest first)
+- pawn capture-promotion discovered double check 
+- pawn capture-promotion discovered check 
+- pawn move-promotion discovered double check 
+- pawn move-promotion discovered check 
+- capture discovered double check 
+- quiet discovered double check 
+- capture discovered check 
+- en-passant discovered double check 
+- en-passant discovered check 
+- quiet discovered check 

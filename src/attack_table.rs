@@ -1,9 +1,8 @@
-use std::ops::Index;
 use std::collections::HashMap;
 
 use crate::pawn::PawnAttackTable;
 use crate::sliding_piece::Magic;
-use crate::{king, knight, Piece, Colour};
+use crate::{king, knight, Piece, Colour, Square};
 use crate::bitboard::BitBoard;
 
 pub struct AttackTable {
@@ -21,14 +20,26 @@ pub struct BoardStatus {
     danger_squares: u64,
     // mask of all the pinned pieces
     pinned_pieces: u64,
-    // Key is the u64 mask of a piece that is pinned to the king
-    // value is the u64 mask of all the legal squares that piece can move to
-    // while not leaving the king in check
-    pinned_legal_squares: HashMap<u64, u64>,
-    // a list of pairs where the first element is a bitmask of an enemy piece putting
-    // the king in check, and the second value is a mask of all the squares that
-    // a friendly piece can move to to block or capture the checking piece
+    // Key is the u64 mask of a friendly piece that is pinned to the king
+    // Value is the u64 mask of all the pseudo-legal squares that piece can move to
+    // while not leaving the king in check. As it's pseudo-legal squares, in 
+    // reality the pinned might not have any legal moves. This must be checked later
+    pinned_pseudo_legal_squares: HashMap<u64, u64>,
+    // a list of pairs where the first element is a bitmask of an enemy piece who
+    // currently has the king in check.
+    // The second value is a mask of all the squares that a friendly piece could 
+    // move to to block or capture the checking piece
     king_attacking_pieces: Vec<(u64, u64)>,
+    // a list of pairs where the first element is a bitmask of a friendly piece
+    // who can potentially move and cause a discovered check
+    // The second value is a mask of all the pseudo-legal squares that piece can
+    // move to to initiate the discovered check. As it's pseudo-legal squares, in
+    // reality the piece might not legally be able to move out of the way. This
+    // must be checked later
+    discovered_check_pseudo_legal_squares:  Vec<(u64, u64)>,
+    // a list of squares each friendly piece can move to to put the king in check,
+    // indexed by Piece
+    check_squares: [u64; 6],
 }
 
 impl AttackTable {
@@ -44,6 +55,13 @@ impl AttackTable {
         }
     }
     
+    pub fn generate_legal_moves(&self, bitboard: BitBoard, colour_to_move: Colour,
+                                en_passant_square: Option<Square>) {
+
+        
+        todo!();
+    }
+    
     // For a given piece type and a bitmask of a single source square, return
     // a bitmask of all the squares that piece attacks
     fn get_single_piece_attacks(
@@ -54,7 +72,9 @@ impl AttackTable {
             occupied: u64) -> u64 {
 
         // should only be 1 bit set
-        debug_assert!(source_sq_mask.is_power_of_two());
+        debug_assert!(source_sq_mask.is_power_of_two(), 
+                      "piece = {:?}, colour = {:?}, mask = {}, occupied = {}", 
+                      piece, colour, source_sq_mask, occupied);
 
         let idx = source_sq_mask.trailing_zeros() as usize;
         match piece {
@@ -207,10 +227,11 @@ impl AttackTable {
      * add the attack squares for the king, knight and pawn to the danger bitboard
      */
 
-    pub fn get_board_status(&self, bitboard: &BitBoard, colour_to_move: Colour) -> BoardStatus {
+    pub fn get_board_status(&self, bitboard: &BitBoard, friendly_colour: Colour) -> BoardStatus {
         // first get the king bitboard for the colour to move
-        let king_mask = bitboard.get_colour_piece_mask(Piece::King, colour_to_move);
-        let king_idx = king_mask.trailing_zeros() as usize;
+        let friendly_king_square = bitboard.get_colour_piece_mask(Piece::King, friendly_colour);
+        let friendly_king_idx = friendly_king_square.trailing_zeros() as usize;
+        
         
         // we need the occupied squares to calculate sliding piece attacks
         let occupied = bitboard.get_entire_mask();
@@ -218,14 +239,18 @@ impl AttackTable {
         // but we want to remove the king because:
         // 1. for danger squares, we have to include behind the king
         // 2. it's not needed for calculating pinned pieces
-        let kingless_mask = occupied ^ king_mask;
+        let kingless_mask = occupied ^ friendly_king_square;
         
         // as we're calculating pinned pieces for colour_to_move, we need to
         // iterate through the sliding pieces of the opposite colour
-        let enemy_colour = match colour_to_move {
+        let enemy_colour = match friendly_colour {
             Colour::White => Colour::Black,
             Colour::Black => Colour::White,
         };
+
+        // needed to get squares friendly pieces can move to to put the enemy king in check
+        let enemy_king_square = bitboard.get_colour_piece_mask(Piece::King, enemy_colour);
+        let enemy_king_idx = enemy_king_square.trailing_zeros() as usize;
 
         // will mark danger squares while calculating pinned pieces 
         let mut danger_squares: u64 = 0;
@@ -235,6 +260,8 @@ impl AttackTable {
         let mut pinned_legal_squares: HashMap<u64, u64> = HashMap::with_capacity(8);
         // A king can only be in check from at most 2 pieces
         let mut king_attacking_pieces = Vec::with_capacity(2);
+        let mut discovered_check_pseudo_legal_squares: Vec<(u64, u64)> = Vec::new();
+        let mut check_squares: [u64; 6] = [0, 0, 0, 0, 0, 0];
         
         for piece in [Piece::Bishop, Piece::Rook, Piece::Queen] {
             let ray_tables = match piece {
@@ -263,16 +290,37 @@ impl AttackTable {
                 _ => panic!("This should not happen"),
             };
             
+            // for that piece, also add check squares friendly pieces can move to
+            // to put the enemy king in check
+            // we put the colour as enemy colour as colour only affects the 
+            // lookup of pawn moves
+            check_squares[piece as usize] = self.get_single_piece_attacks(
+                piece, 
+                enemy_colour, 
+                enemy_king_square, 
+                occupied
+            );
+                
+            // Start of checks for friendly pieces that are pinned to the friendly king
+
             // get bitmasks of all pieces of that type
-            let mut piece_mask = bitboard.get_colour_piece_mask(piece, enemy_colour);
+            let mut enemy_piece_mask = bitboard.get_colour_piece_mask(piece, enemy_colour);
+            
+            // get the full attacks for the piece if it was on the friendly king square
+            let king_att_squares = self.get_single_piece_attacks(
+                piece, 
+                enemy_colour, 
+                friendly_king_square, 
+                kingless_mask
+            );
             
             // iterate through those pieces one by one
-            while piece_mask != 0 {
+            while enemy_piece_mask != 0 {
                 // single out the least significant bit
-                let source_square = piece_mask & piece_mask.wrapping_neg();
+                let source_square = enemy_piece_mask & enemy_piece_mask.wrapping_neg();
                 
                 // get the full attacks for that piece on the source square
-                let piece_att_squares = self.get_single_piece_attacks(
+                let enemy_piece_att_squares = self.get_single_piece_attacks(
                     piece, 
                     enemy_colour, 
                     source_square, 
@@ -280,15 +328,7 @@ impl AttackTable {
                 );
                 
                 // add to danger squares
-                danger_squares |= piece_att_squares;
-                
-                // get the full attacks for the piece if it was on the king square
-                let king_att_squares = self.get_single_piece_attacks(
-                    piece, 
-                    enemy_colour, 
-                    king_mask, 
-                    kingless_mask
-                );
+                danger_squares |= enemy_piece_att_squares;
                 
                 let piece_idx = source_square.trailing_zeros() as usize;
 
@@ -296,11 +336,11 @@ impl AttackTable {
                 for ray_direction in ray_tables.iter() {
                     // get the ray mask for that direction
                     let ray_mask = ray_direction.0[piece_idx];
-                    let piece_ray_mask = ray_mask & piece_att_squares;
+                    let piece_ray_mask = ray_mask & enemy_piece_att_squares;
                     
                     // now get the mask for the opposite direction with the piece if placed on 
                     // the king square
-                    let ray_mask = ray_direction.1[king_idx];
+                    let ray_mask = ray_direction.1[friendly_king_idx];
                     let king_ray_mask = ray_mask & king_att_squares;
                     
                     // check if king is in check via the king ray mask
@@ -315,7 +355,7 @@ impl AttackTable {
                     // overlap in all the intermediate squares. e.g. on the board
                     // "8/8/8/4k3/8/2r3P1/8/Q3R3 w - - 0 1" it incorrectly marks E2, E3 and E4 as
                     // "pinned". The intersection with the colour mask removes that.
-                    let pinned = piece_ray_mask & king_ray_mask & bitboard.get_colour_mask(colour_to_move);
+                    let pinned = piece_ray_mask & king_ray_mask & bitboard.get_colour_mask(friendly_colour);
                     
                     pinned_pieces |= pinned;
 
@@ -325,6 +365,8 @@ impl AttackTable {
                     // but as that can only happen when the piece can have the king in check it 
                     // can't pin a piece in one of the other ray directions anyway
                     if pinned != 0 {
+                        // check there's only one pinned piece
+                        debug_assert!(pinned.is_power_of_two());
                         // The pinned piece can only move along the ray direction from the king to
                         // the pinning piece (including capturing), so just union the two masks and
                         // the source_square of the pinning piece as that hasn't been included in 
@@ -334,7 +376,68 @@ impl AttackTable {
                     }
                 }
                 // remove least significant bit from piece mask for next iteration
-                piece_mask ^= source_square;
+                enemy_piece_mask ^= source_square;
+            }
+            
+            // start of checks for friendly pieces pinned to the enemy king 
+            // i.e. those that can cause a discovered check
+            
+            // get bitmasks of all pieces of that type
+            let mut friendly_piece_mask = bitboard.get_colour_piece_mask(piece, friendly_colour);
+            
+            // get the full attacks for the piece if it was on the enemy king square
+            let king_att_squares = self.get_single_piece_attacks(
+                piece, 
+                friendly_colour, 
+                enemy_king_square, 
+                occupied 
+            );
+            
+            // iterate through those pieces one by one
+            while friendly_piece_mask != 0 {
+                let source_square = friendly_piece_mask & friendly_piece_mask.wrapping_neg();
+                
+                // get the full attacks for that piece on the source square
+                let friendly_piece_att_squares = self.get_single_piece_attacks(
+                    piece, 
+                    friendly_colour, 
+                    source_square, 
+                    occupied 
+                );
+                
+                let piece_idx = source_square.trailing_zeros() as usize;
+                
+                // loop through each ray direction separately
+                for ray_direction in ray_tables.iter() {
+                    // get the ray mask for that direction
+                    let ray_mask = ray_direction.0[piece_idx];
+                    let piece_ray_mask = ray_mask & friendly_piece_att_squares;
+                    
+                    // now get the mask for the opposite direction with the piece if placed on 
+                    // the king square
+                    let ray_mask = ray_direction.1[enemy_king_idx];
+                    let king_ray_mask = ray_mask & king_att_squares;
+                    
+                    let pinned = piece_ray_mask & king_ray_mask & bitboard.get_colour_mask(friendly_colour);
+                    
+                    // means we have found a pinned piece for that piece, can skip the remaining
+                    // ray directions as a piece can't pin a piece in multiple ray directions
+                    // Technically this could incorrectly break early due to the comment above,
+                    // but as that can only happen when the piece can have the king in check it 
+                    // can't pin a piece in one of the other ray directions anyway
+                    if pinned != 0 {
+                        // check that there's only one pinned piece
+                        debug_assert!(pinned.is_power_of_two());
+                        discovered_check_pseudo_legal_squares.push((
+                            pinned,
+                            // the piece can move to any square that's not in the ray blocking the
+                            // enemy king to initiate discovered check, i.e. the rest of the board
+                            !(piece_ray_mask | king_ray_mask | source_square | enemy_king_square)
+                        ));
+                    }
+                }
+                // remove least significant bit from piece mask for next iteration
+                friendly_piece_mask ^= source_square;
             }
         }
         
@@ -343,6 +446,16 @@ impl AttackTable {
         // and knight attacks
         for piece in [Piece::Pawn, Piece::King, Piece::Knight] {
             let mut source_squares = bitboard.get_colour_piece_mask(piece, enemy_colour);
+            
+            // for that piece, also add check squares friendly pieces can move to
+            // to put the enemy king in check
+            check_squares[piece as usize] = self.get_single_piece_attacks(
+                piece, 
+                enemy_colour, 
+                enemy_king_square, 
+                occupied
+            );
+
             while source_squares != 0 {
                 let source_square = source_squares & source_squares.wrapping_neg();
                 let attacking_squares = self.get_single_piece_attacks(
@@ -351,10 +464,11 @@ impl AttackTable {
                     source_square, 
                     occupied
                 );
+                
                 danger_squares |= attacking_squares;
                 
                 // if piece is putting the king in check
-                if attacking_squares & king_mask == king_mask {
+                if attacking_squares & friendly_king_square == friendly_king_square {
                     debug_assert!(piece != Piece::King);
                     // As a non sliding piece can't be blocked it can only be captured
                     king_attacking_pieces.push((source_square, source_square));
@@ -366,8 +480,10 @@ impl AttackTable {
         BoardStatus {
             danger_squares,
             pinned_pieces,
-            pinned_legal_squares,
+            pinned_pseudo_legal_squares: pinned_legal_squares,
             king_attacking_pieces,
+            discovered_check_pseudo_legal_squares,
+            check_squares,
         }
     }
 }
@@ -593,8 +709,36 @@ mod tests {
             "Checking the legal squares for each pinned piece for r1bqkb1r/ppp2ppp/2np1n2/1B2p2Q/8/2N2N2/PPPP1PPP/R1B1R1K1 w - - 0 1",
             board_status.pinned_pieces,
             expected_pinned_legal_squares,
-            board_status.pinned_legal_squares,
+            board_status.pinned_pseudo_legal_squares,
         );
+        
+        assert_eq!(0, board_status.discovered_check_pseudo_legal_squares.len(), 
+                  "Check no discovered checks for r1bqkb1r/ppp2ppp/2np1n2/1B2p2Q/8/2N2N2/PPPP1PPP/R1B1R1K1"
+        );
+        
+        let expected_check_squares: [u64; 6] = [
+            fen_to_hex("8/8/8/8/8/8/5p1p/8 w - - 0 1"), // pawns
+            fen_to_hex("8/8/8/8/8/8/5kkk/5k1k w - - 0 1"), // king
+            fen_to_hex("8/8/8/8/8/8/5qqq/4qq1q w - - 0 1"), // queen
+            fen_to_hex("8/8/8/8/8/8/5p1p/8 w - - 0 1"), // bishop
+            fen_to_hex("8/8/8/8/8/5n1n/4n3/8 w - - 0 1"), // knight
+            fen_to_hex("8/8/8/8/8/8/6r1/4rr1r w - - 0 1"), // rook
+        ];
+        
+        for (i, (expected, actual)) in expected_check_squares.iter()
+                                                             .zip(board_status.check_squares.iter())
+                                                             .enumerate() {
+            let description = format!(
+                "Check squares for {:?} for r1bqkb1r/ppp2ppp/2np1n2/1B2p2Q/8/2N2N2/PPPP1PPP/R1B1R1K1", 
+                Piece::try_from(i).unwrap()
+            );
+            test_bitboard_eq!(
+                description,
+                *expected,
+                *actual,
+            );
+        }
+
         
         // -----------------------------------------------------------------------------------------
         let bitboard = BitBoard::try_from(
@@ -622,24 +766,51 @@ mod tests {
             "Checking the legal squares for each pinned piece for rnb1r1k1/pppp1ppp/5n2/8/1b5q/2N2PP1/PPPPP2P/R1BQKBNR",
             board_status.pinned_pieces,
             expected_pinned_legal_squares,
-            board_status.pinned_legal_squares,
+            board_status.pinned_pseudo_legal_squares,
         );
+        
+        assert_eq!(0, board_status.discovered_check_pseudo_legal_squares.len(),
+                   "Check no discovered checks for rnb1r1k1/pppp1ppp/5n2/8/1b5q/2N2PP1/PPPPP2P/R1BQKBNR"
+        );
+
+        let expected_check_squares: [u64; 6] = [
+            fen_to_hex("8/5P1P/8/8/8/8/8/8 w - - 0 1"), // pawns
+            fen_to_hex("5K1K/5KKK/8/8/8/8/8/8 w - - 0 1"), // king
+            fen_to_hex("4QQ1Q/5QQQ/8/8/8/8/8/8 w - - 0 1"), // queen
+            fen_to_hex("8/5P1P/8/8/8/8/8/8 w - - 0 1"), // bishop
+            fen_to_hex("8/4N3/5N1N/8/8/8/8/8 w - - 0 1"), // knight
+            fen_to_hex("4RR1R/6R1/8/8/8/8/8/8 w - - 0 1"), // rook
+        ];
+
+        for (i, (expected, actual)) in expected_check_squares.iter()
+                                                             .zip(board_status.check_squares.iter())
+                                                             .enumerate() {
+            let description = format!(
+                "Check squares for {:?} for rnb1r1k1/pppp1ppp/5n2/8/1b5q/2N2PP1/PPPPP2P/R1BQKBNR", 
+                Piece::try_from(i).unwrap()
+            );
+            test_bitboard_eq!(
+                description,
+                *expected,
+                *actual,                
+            );
+        }
         
         // -----------------------------------------------------------------------------------------
         let bitboard = BitBoard::try_from(
-            "8/8/8/4k3/8/2r3P1/8/Q3R3"
+            "8/1K6/8/4k3/8/2r3P1/8/Q3R3"
         ).unwrap();
 
         let board_status = attack_table.get_board_status(&bitboard, Colour::Black);
 
         test_bitboard_eq!(
-            "Checking for black danger squares for 8/8/8/4k3/8/2r3P1/8/Q3R3 and that they include squares behind the king",
-            fen_to_hex("Q3Q3/Q3Q3/Q3Q3/Q3Q3/Q3QQ1Q/Q1Q1Q3/QQ2Q3/QQQQQQQQ w - - 0 1"),
+            "Checking for black danger squares for 8/1K6/8/4k3/8/2r3P1/8/Q3R3 and that they include squares behind the king",
+            fen_to_hex("QQQ1Q3/Q1Q1Q3/QQQ1Q3/Q3Q3/Q3QQ1Q/Q1Q1Q3/QQ2Q3/QQQQQQQQ w - - 0 1"),
             board_status.danger_squares,
         );
 
         test_bitboard_eq!(
-            "Checking for black pinned pieces for 8/8/8/4k3/8/2r3P1/8/Q3R3",
+            "Checking for black pinned pieces for 8/1K6/8/4k3/8/2r3P1/8/Q3R3",
             fen_to_hex("8/8/8/8/8/2r5/8/8 w - - 0 1"),
             board_status.pinned_pieces,
         );
@@ -648,27 +819,53 @@ mod tests {
         expected_pinned_legal_squares.insert(1 << Square::C3 as u32, fen_to_hex("8/8/8/8/3r4/2r5/1r6/r7 w - - 0 1"));
 
         test_all_pinned_piece_legal_moves!(
-            "Checking the legal squares for each pinned piece for 8/8/8/4k3/8/2r3P1/8/Q3R3",
+            "Checking the legal squares for each pinned piece for 8/1K6/8/4k3/8/2r3P1/8/Q3R3",
             board_status.pinned_pieces,
             expected_pinned_legal_squares,
-            board_status.pinned_legal_squares,
+            board_status.pinned_pseudo_legal_squares,
+        );
+
+        assert_eq!(0, board_status.discovered_check_pseudo_legal_squares.len(),
+                   "Check no discovered checks for 8/1K6/8/4k3/8/2r3P1/8/Q3R3"
         );
         
+        let expected_check_squares: [u64; 6] = [
+            fen_to_hex("p1p5/8/8/8/8/8/8/8 w - - 0 1"), // pawns
+            fen_to_hex("kkk5/k1k5/kkk5/8/8/8/8/8 w - - 0 1"), // king
+            fen_to_hex("qqq5/q1qqqqqq/qqq5/1q1q4/1q2q3/1q3q2/1q4q1/1q5q w - - 0 1"), // queen
+            fen_to_hex("b1b5/8/b1b5/3b4/4b3/5b2/6b1/7b w - - 0 1"), // bishop
+            fen_to_hex("3n4/8/3n4/n1n5/8/8/8/8 w - - 0 1"), // knight
+            fen_to_hex("1r6/r1rrrrrr/1r6/1r6/1r6/1r6/1r6/1r6 w - - 0 1"), // rook
+        ];
+        
+        for (i, (expected, actual)) in expected_check_squares.iter()
+                                                             .zip(board_status.check_squares.iter())
+                                                             .enumerate() {
+            let description = format!(
+                "Check squares for {:?} for 8/1K6/8/4k3/8/2r3P1/8/Q3R3",
+                Piece::try_from(i).unwrap()
+            );
+            test_bitboard_eq!(
+                description,
+                *expected,
+                *actual,                
+            );
+        }
         // -----------------------------------------------------------------------------------------
         let bitboard = BitBoard::try_from(
-            "8/4k3/3r4/4p3/4b3/Q5P1/8/4R3"
+            "8/4k3/3r4/4p3/4b3/Q5P1/7K/4R3",
         ).unwrap();
         
         let board_status = attack_table.get_board_status(&bitboard, Colour::Black);
 
         test_bitboard_eq!(
-            "Checking for black danger squares for 8/4k3/3r4/4p3/4b3/Q5P1/8/4R3",
-            fen_to_hex("K7/K7/K2K4/K1K5/KK2KK1K/1KKKKKP1/KK2K3/KKKK1KKK w - - 0 1"),
+            "Checking for black danger squares for 8/4k3/3r4/4p3/4b3/Q5P1/7K/4R3",
+            fen_to_hex("K7/K7/K2K4/K1K5/KK2KK1K/1KKKKKPK/KK2K1K1/KKKK1KKK w - - 0 1"),
             board_status.danger_squares,
         );
 
         test_bitboard_eq!(
-            "Checking for black pinned pieces for 8/4k3/3r4/4p3/4b3/Q5P1/8/4R3 and that two pieces blocking the king don't count as pinned",
+            "Checking for black pinned pieces for 8/4k3/3r4/4p3/4b3/Q5P1/7K/4R3 and that two pieces blocking the king don't count as pinned",
             fen_to_hex("8/8/3r4/8/8/8/8/8 w - - 0 1"),
             board_status.pinned_pieces,
         );
@@ -677,28 +874,28 @@ mod tests {
         expected_pinned_legal_squares.insert(1 << Square::D6 as u32, fen_to_hex("8/8/3r4/2r5/1r6/r7/8/8 w - - 0 1"));
 
         test_all_pinned_piece_legal_moves!(
-            "Checking the legal squares for each pinned piece for 8/4k3/3r4/4p3/4b3/Q5P1/8/4R3",
+            "Checking the legal squares for each pinned piece for 8/4k3/3r4/4p3/4b3/Q5P1/7K/4R3",
             board_status.pinned_pieces,
             expected_pinned_legal_squares,
-            board_status.pinned_legal_squares,
+            board_status.pinned_pseudo_legal_squares,
         );
         
         // -----------------------------------------------------------------------------------------
         let bitboard = BitBoard::try_from(
-            "1kb5/pp6/N7/8/8/6Q1/8/8"
+            "1kb5/pp6/N7/8/8/6Q1/8/1K6"
         ).unwrap();
 
         let board_status = attack_table.get_board_status(&bitboard, Colour::Black);
 
         let pieces_attacking_king = board_status.king_attacking_pieces.len();
         assert_eq!(2, pieces_attacking_king,
-                  "1kb5/pp6/N7/8/8/6Q1/8/8 expects 2 pieces putting the king in check, but only got {}", 
+                  "1kb5/pp6/N7/8/8/6Q1/8/1K6 expects 2 pieces putting the king in check, but only got {}", 
                   pieces_attacking_king);
         
         let idx = board_status.king_attacking_pieces.iter().position(|&(a, _)| a == 1 << Square::A6 as u32);
         assert!(idx.is_some(), "Knight on A6 expected as king-attacking piece but not found");
         test_bitboard_eq!(
-            "Checking for blocking and/or capturing squares to get out of check for the knight on A6 for 1kb5/pp6/N7/8/8/6Q1/8/8",
+            "Checking for blocking and/or capturing squares to get out of check for the knight on A6 for 1kb5/pp6/N7/8/8/6Q1/8/1K6",
             fen_to_hex("8/8/N7/8/8/8/8/8 w - - 0 1"),
             board_status.king_attacking_pieces[idx.unwrap()].1,
         );
@@ -706,9 +903,33 @@ mod tests {
         let idx = board_status.king_attacking_pieces.iter().position(|&(a, _)| a == 1 << Square::G3 as u32);
         assert!(idx.is_some(), "Queen on G3 expected as king-attacking piece but not found");
         test_bitboard_eq!(
-            "Checking for blocking and/or capturing squares to get out of check for the queen on G3 for 1kb5/pp6/N7/8/8/6Q1/8/8",
+            "Checking for blocking and/or capturing squares to get out of check for the queen on G3 for 1kb5/pp6/N7/8/8/6Q1/8/1K6",
             fen_to_hex("8/2Q5/3Q4/4Q3/5Q2/6Q1/8/8 w - - 0 1"),
             board_status.king_attacking_pieces[idx.unwrap()].1,
+        );
+        
+        // -----------------------------------------------------------------------------------------
+        // 
+        let bitboard = BitBoard::try_from(
+            "8/8/1k6/2N5/8/1B6/5Q2/1R4K1",
+        ).unwrap();
+
+        let board_status = attack_table.get_board_status(&bitboard, Colour::White);
+
+        let expected = (
+            1 << Square::B3 as u32,
+            fen_to_hex("PPPPPPPP/PPPPPPPP/P1PPPPPP/P1PPPPPP/P1PPPPPP/P1PPPPPP/P1PPPPPP/P1PPPPPP"),
+        );
+        assert!(board_status.discovered_check_pseudo_legal_squares.contains(&expected),
+                "8/8/1k6/2N5/8/1B6/5Q2/1R4K1 shows the bishop on B3 as a potential discovered check"
+        );
+        
+        let expected = (
+            1 << Square::C5 as u32,
+            fen_to_hex("PPPPPPPP/PPPPPPPP/P1PPPPPP/PP1PPPPP/PPP1PPPP/PPPP1PPP/PPPPP1PP/PPPPPPPP"),
+        );
+        assert!(board_status.discovered_check_pseudo_legal_squares.contains(&expected),
+                "8/8/1k6/2N5/8/1B6/5Q2/1R4K1 shows the knight on C5 as a potential discovered check"
         );
     }
 }
