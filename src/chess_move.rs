@@ -17,6 +17,7 @@ pub struct SavedMove {
     pub prev_castling_rights: CastlingRights,
     // half move num before the move was made
     pub prev_half_move_num: u16,
+    pub prev_en_passant: Option<Square>,
 }
 
 #[derive(Debug, Clone, Copy)]
