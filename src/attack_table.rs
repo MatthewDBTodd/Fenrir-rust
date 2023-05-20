@@ -59,15 +59,53 @@ impl AttackTable {
     pub fn generate_legal_moves(&self, board: &Board, moves: &[Move; 256]) -> usize {
 
         0usize 
-        // let board_status = self.get_board_status(&bitboard, colour_to_move);
-        // 
-        // let in_check = !board_status.king_attacking_pieces.is_empty();
-        // 
-        // if in_check {
-        //     // if in double check, just generate king moves
+        /*
+         * simple algorithm:
+         * if king in check from 2 pieces:
+         *      generate king moves
+         *      (danger_squares & king_moves) ^ king_moves
+         *      add remaining moves to list
+         *      return move_list
+         * else if king in check from 1 piece:
+         *      for each piece type:
+         *          generate moves
+         *          AND with checking piece
+         *          if capture available
+         *              add to move list
+         *          AND with blocker squares
+         *              add each to list
+         *          generate king moves as above and add to list
+         *      return move_list
+         * else (king not in check)
+         * 
+         * for each piece type:
+         *      generate moves
+         *      mask out pinned pieces
+         *      add each move to the list
+         * for each pinned piece:
+         *      AND with allowed_ray
+         *      add remaining moves to list
+         * return list
+         */
+        /*
+        if king in check from 2 pieces:
+            generate king moves
+            (danger squares & king moves) ^ king moves
+            for each legal king move:
+                add to move list
+            return move list
+        else if king in check from 1 piece:
+            ...
+        else :
+            for each piece type
+                mask out pinned pieces
+                generate pseudo-legal moves
+                
+            ...
 
-        //     // otherwise    
-        // }
+        // check for en_passant capture
+        // check for castling
+         */
     }
     
     // For a given piece type and a bitmask of a single source square, return
@@ -352,8 +390,10 @@ impl AttackTable {
                     let king_ray_mask = ray_mask & king_att_squares;
                     
                     // check if king is in check via the king ray mask
+                    // TODO: mask out the checking piece so we can separately check
+                    // for capturing the checker via attacking_pieces.0
                     if king_ray_mask & source_square == source_square {
-                        king_attacking_pieces.push((source_square, king_ray_mask));
+                        king_attacking_pieces.push((source_square, king_ray_mask ^ source_square));
                     }
                     
                     // intersection of the two 
@@ -911,8 +951,8 @@ mod tests {
         let idx = board_status.king_attacking_pieces.iter().position(|&(a, _)| a == 1 << Square::G3 as u32);
         assert!(idx.is_some(), "Queen on G3 expected as king-attacking piece but not found");
         test_bitboard_eq!(
-            "Checking for blocking and/or capturing squares to get out of check for the queen on G3 for 1kb5/pp6/N7/8/8/6Q1/8/1K6",
-            fen_to_hex("8/2Q5/3Q4/4Q3/5Q2/6Q1/8/8 w - - 0 1"),
+            "Checking for blocking to get out of check for the queen on G3 for 1kb5/pp6/N7/8/8/6Q1/8/1K6",
+            fen_to_hex("8/2q5/3q4/4q3/5q2/8/8/8 w - - 0 1"),
             board_status.king_attacking_pieces[idx.unwrap()].1,
         );
         
