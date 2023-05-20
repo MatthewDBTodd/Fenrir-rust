@@ -69,22 +69,60 @@ impl Default for Board {
     }
 }
 
+enum CastlingSide {
+    WhiteKingside,
+    WhiteQueenside,
+    BlackKingside,
+    BlackQueenside,
+}
+// bit position for each castling side is 1 << (CastlingSide as u32)
+// e.g. BlackKingside is 1 << 2 i.e. 0b00000100
 #[derive(Debug, PartialEq)]
 struct CastlingRights {
-    w_kingside: bool,
-    w_queenside: bool,
-    b_kingside: bool,
-    b_queenside: bool,
+    mask: u8,
 }
 
 impl Default for CastlingRights {
     fn default() -> Self {
         CastlingRights {
-            w_kingside: true,
-            w_queenside: true,
-            b_kingside: true,
-            b_queenside: true,
+            mask: 0b00001111,
         }
+    }
+}
+
+impl CastlingRights {
+    pub fn enable(&mut self, side: CastlingSide) {
+        self.mask |= 1u8 << side as u32;
+    }
+    
+    pub fn disable(&mut self, side: CastlingSide) {
+        self.mask &= !(1u8 << side as u32);
+    }
+}
+
+impl TryFrom<&str> for CastlingRights {
+    type Error = &'static str;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        if s.is_empty() || s.len() > 4 {
+            return Err("Error: invalid castling rights string in fen");
+        }
+        let mut rv = CastlingRights {
+            mask: 0u8,
+        };
+        if s == "-" {
+            return Ok(rv);
+        }
+        for c in s.chars() {
+            match c {
+                'K' => rv.enable(CastlingSide::WhiteKingside),
+                'k' => rv.enable(CastlingSide::BlackKingside),
+                'Q' => rv.enable(CastlingSide::WhiteQueenside),
+                'q' => rv.enable(CastlingSide::BlackQueenside),
+                _ => return Err("Error: invalid castling rights string in fen"),
+            }
+        }
+        Ok(rv)
     }
 }
 
@@ -119,35 +157,6 @@ impl Square {
     }
 }
 
-impl TryFrom<&str> for CastlingRights {
-    type Error = &'static str;
-
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        if s.is_empty() || s.len() > 4 {
-            return Err("Error: invalid castling rights string in fen");
-        }
-        let mut rv = CastlingRights {
-            w_kingside: false,
-            w_queenside: false,
-            b_kingside: false,
-            b_queenside: false,
-        };
-        if s == "-" {
-            return Ok(rv);
-        }
-        for c in s.chars() {
-            match c {
-                'K' => rv.w_kingside = true,
-                'k' => rv.b_kingside = true,
-                'Q' => rv.w_queenside = true,
-                'q' => rv.b_queenside = true,
-                _ => return Err("Error: invalid castling rights string in fen"),
-            }
-        }
-        Ok(rv)
-    }
-}
-
 impl fmt::Display for Board {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, "{}", self.bitboard)?;
@@ -171,10 +180,7 @@ mod tests {
         assert_eq!(
             board.castling_rights,
             CastlingRights {
-                w_kingside: true,
-                w_queenside: true,
-                b_kingside: true,
-                b_queenside: true,
+                mask: 0b00001111,
             }
         );
         assert_eq!(board.en_passant, None);
@@ -275,10 +281,7 @@ mod tests {
         assert_eq!(
             board.castling_rights,
             CastlingRights {
-                w_kingside: false,
-                w_queenside: false,
-                b_kingside: false,
-                b_queenside: false,
+                mask: 0u8,
             }
         );
         assert_eq!(board.en_passant, None);
@@ -297,10 +300,7 @@ mod tests {
         assert_eq!(
             board.castling_rights,
             CastlingRights {
-                w_kingside: true,
-                w_queenside: true,
-                b_kingside: true,
-                b_queenside: true,
+                mask: 0b00001111,
             }
         );
         assert_eq!(board.en_passant, Some(Square::E3));
@@ -341,10 +341,7 @@ mod tests {
         assert_eq!(
             board.castling_rights,
             CastlingRights {
-                w_kingside: true,
-                w_queenside: true,
-                b_kingside: true,
-                b_queenside: false,
+                mask: 0b00000111,
             }
         );
         assert_eq!(board.en_passant, None);
