@@ -8,6 +8,7 @@ pub mod masks;
 pub mod pawn;
 pub mod sliding_piece;
 pub mod attack_table;
+pub mod chess_move;
 
 // #[cfg(test)]
 pub mod test_helpers;
@@ -41,39 +42,6 @@ pub enum Square {
     A7, B7, C7, D7, E7, F7, G7, H7,
     A8, B8, C8, D8, E8, F8, G8, H8,
 }
-
-#[derive(Debug, Clone, Copy)]
-#[allow(dead_code)]
-pub struct Move {
-    source_sq: Square,
-    dest_sq: Square,
-    piece: Piece,
-    move_type: MoveType,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum MoveType {
-    Quiet,
-    Capture(Piece),
-    EnPassant,
-    CastleKingSide,
-    CastleQueenSide,
-    MovePromotion(Piece),
-    CapturePromotion(Piece),
-    ErrorMove,
-}
-
-impl Default for Move {
-    fn default() -> Self {
-        Self {
-            source_sq: Square::A1,
-            dest_sq: Square::A1,
-            piece: Piece::Pawn,
-            move_type: MoveType::ErrorMove,
-        }
-    }    
-}
-
 
 impl TryFrom<&str> for Colour {
     type Error = &'static str;

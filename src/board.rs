@@ -1,5 +1,6 @@
 use crate::bitboard::*;
-use crate::{Colour, Move, Square};
+use crate::{Colour, Square};
+use crate::chess_move::Move;
 
 use std::fmt;
 
@@ -7,10 +8,10 @@ use std::fmt;
 #[allow(dead_code)]
 pub struct Board {
     pub bitboard: BitBoard,
+    // TODO: turn_colour can instead be calculated from half_move_num to save space?
     pub turn_colour: Colour,
     move_num: u32,
     half_move_num: u32,
-    // TODO: make castling rights a u8 bit mask
     castling_rights: CastlingRights,
     en_passant: Option<Square>,
     move_history: Vec<Move>,
@@ -69,7 +70,7 @@ impl Default for Board {
     }
 }
 
-enum CastlingSide {
+pub enum CastlingSide {
     WhiteKingside,
     WhiteQueenside,
     BlackKingside,
@@ -77,8 +78,8 @@ enum CastlingSide {
 }
 // bit position for each castling side is 1 << (CastlingSide as u32)
 // e.g. BlackKingside is 1 << 2 i.e. 0b00000100
-#[derive(Debug, PartialEq)]
-struct CastlingRights {
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct CastlingRights {
     mask: u8,
 }
 

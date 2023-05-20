@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use crate::board::Board;
 use crate::pawn::PawnAttackTable;
 use crate::sliding_piece::Magic;
-use crate::{king, knight, Piece, Colour, Square, Move};
+use crate::{king, knight, Piece, Colour, Square};
+use crate::chess_move::Move;
 use crate::bitboard::BitBoard;
 
 pub struct AttackTable {
@@ -106,6 +107,17 @@ impl AttackTable {
          * for each pinned piece:
          *      AND with allowed_ray
          *      add remaining moves to list
+         * if en_passant available:
+         *      pawn_attacks & en_passant_square
+         *      if pseudo-legal:
+         *          make move
+         *          if in check:
+         *              undo move
+         *          else
+         *              undo move
+         *              add en passant move to list
+         * if castling available:
+         *      
          * return list
          */
         /*
