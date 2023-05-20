@@ -323,10 +323,7 @@ impl AttackTable {
         
         // as we're calculating pinned pieces for colour_to_move, we need to
         // iterate through the sliding pieces of the opposite colour
-        let enemy_colour = match friendly_colour {
-            Colour::White => Colour::Black,
-            Colour::Black => Colour::White,
-        };
+        let enemy_colour = !&friendly_colour;
 
         // needed to get squares friendly pieces can move to to put the enemy king in check
         let enemy_king_square = bitboard.get_colour_piece_mask(Piece::King, enemy_colour);

@@ -172,3 +172,11 @@ they were in before...
 castling rights...
 - means we might want to store the castling rights for each move in the move history?
 - encourages us to refactor castling rights to be a u8 bitmask instead of 4 booleans
+
+things that can't be recovered from undoing a move, i.e. things that need to be stored in move history:
+- casting rights
+- 
+
+move encoding:
+6 bits for source square
+6 bits for target square 

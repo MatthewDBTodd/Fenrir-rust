@@ -1,6 +1,6 @@
 use crate::bitboard::*;
-use crate::{Colour, Square};
-use crate::chess_move::Move;
+use crate::{Colour, Square, Piece};
+use crate::chess_move::{Move, SavedMove, MoveType};
 
 use std::fmt;
 
@@ -10,11 +10,11 @@ pub struct Board {
     pub bitboard: BitBoard,
     // TODO: turn_colour can instead be calculated from half_move_num to save space?
     pub turn_colour: Colour,
-    move_num: u32,
-    half_move_num: u32,
+    move_num: u16,
+    half_move_num: u16,
     castling_rights: CastlingRights,
     en_passant: Option<Square>,
-    move_history: Vec<Move>,
+    move_history: Vec<SavedMove>,
     board_hash: u64,
 }
 
@@ -27,11 +27,11 @@ impl Board {
         if parts.len() != 6 {
             return Err("Error: fen string does not contain the required 6 parts");
         }
-        let Ok(half_move_num) = parts[4].parse::<u32>() else {
+        let Ok(half_move_num) = parts[4].parse::<u16>() else {
             return Err("Error: invalid half move num in fen string");
         };
 
-        let Ok(move_num) = parts[5].parse::<u32>() else {
+        let Ok(move_num) = parts[5].parse::<u16>() else {
             return Err("Error: invalid move num in fen string");
         };
         Ok(Board {
@@ -47,7 +47,155 @@ impl Board {
     }
     
     pub fn make_move(&mut self, move_: Move) {
+        let saved_castling = self.castling_rights;
+        let saved_half_move_num = self.half_move_num;
+
+        self.bitboard.remove_piece(self.turn_colour, move_.piece, move_.source_sq);
+        // TODO: capture can be optimised by only changing the piece bitboard, full occupied bitboard
+        // doesn't need changing
+        match move_.move_type {
+            MoveType::Quiet => {
+                self.bitboard.place_piece(self.turn_colour, move_.piece, move_.dest_sq);
+                self.en_passant = None;
+                self.half_move_num += 1;
+            },
+            MoveType::Capture(piece) => {
+                self.bitboard.remove_piece(!&self.turn_colour, piece, move_.dest_sq);
+                self.bitboard.place_piece(self.turn_colour, move_.piece, move_.dest_sq);
+                self.en_passant = None;
+                self.half_move_num = 0;
+            },
+            MoveType::DoublePawnPush => {
+                self.bitboard.place_piece(self.turn_colour, move_.piece, move_.dest_sq);
+                self.en_passant = match move_.dest_sq {
+                    Square::A4 => Some(Square::A3),
+                    Square::B4 => Some(Square::B3),
+                    Square::C4 => Some(Square::C3),
+                    Square::D4 => Some(Square::D3),
+                    Square::E4 => Some(Square::E3),
+                    Square::F4 => Some(Square::F3),
+                    Square::G4 => Some(Square::G3),
+                    Square::H4 => Some(Square::H3),
+                    Square::A5 => Some(Square::A6),
+                    Square::B5 => Some(Square::B6),
+                    Square::C5 => Some(Square::C6),
+                    Square::D5 => Some(Square::D6),
+                    Square::E5 => Some(Square::E6),
+                    Square::F5 => Some(Square::F6),
+                    Square::G5 => Some(Square::G6),
+                    Square::H5 => Some(Square::H6),
+                    _ => panic!("invalid double pawn push square"),
+                };
+                self.half_move_num = 0;
+            },
+            MoveType::EnPassant => {
+                debug_assert!(self.en_passant.is_some());
+                self.bitboard.remove_piece(!&self.turn_colour, Piece::Pawn, self.en_passant.unwrap());
+                self.bitboard.place_piece(self.turn_colour, move_.piece, move_.dest_sq);
+                self.en_passant = None;
+                self.half_move_num = 0;
+            },
+            MoveType::CastleKingSide => {
+                debug_assert!(move_.piece == Piece::King);
+                debug_assert!((self.turn_colour == Colour::White && move_.source_sq == Square::E1)
+                            || self.turn_colour == Colour::Black && move_.source_sq == Square::E8);
+                debug_assert!((self.turn_colour == Colour::White && move_.dest_sq == Square::G1)
+                            || self.turn_colour == Colour::Black && move_.dest_sq == Square::G8);
+
+                self.bitboard.place_piece(self.turn_colour, move_.piece, move_.dest_sq);
+                let rook_sq = if self.turn_colour == Colour::White {
+                    Square::H1
+                } else {
+                    Square::H8
+                };
+                self.bitboard.remove_piece(self.turn_colour, Piece::Rook, rook_sq);
+                let rook_sq = if self.turn_colour == Colour::White {
+                    Square::F1
+                } else {
+                    Square::F8
+                };
+                self.bitboard.place_piece(self.turn_colour, Piece::Rook, rook_sq);
+                let (kingside, queenside) = match self.turn_colour {
+                    Colour::White => (CastlingSide::WhiteKingside, CastlingSide::WhiteQueenside),
+                    Colour::Black => (CastlingSide::BlackKingside, CastlingSide::BlackQueenside),
+                };
+                self.castling_rights.disable(kingside);
+                self.castling_rights.disable(queenside);
+                self.en_passant = None;
+                self.half_move_num += 1;
+            },
+            MoveType::CastleQueenSide => {
+                debug_assert!(move_.piece == Piece::King);
+                debug_assert!((self.turn_colour == Colour::White && move_.source_sq == Square::E1)
+                            || self.turn_colour == Colour::Black && move_.source_sq == Square::E8);
+                debug_assert!((self.turn_colour == Colour::White && move_.dest_sq == Square::C1)
+                            || self.turn_colour == Colour::Black && move_.dest_sq == Square::C8);
+
+                self.bitboard.place_piece(self.turn_colour, move_.piece, move_.dest_sq);
+                let rook_sq = if self.turn_colour == Colour::White {
+                    Square::A1
+                } else {
+                    Square::A8
+                };
+                self.bitboard.remove_piece(self.turn_colour, Piece::Rook, rook_sq);
+                let rook_sq = if self.turn_colour == Colour::White {
+                    Square::D1
+                } else {
+                    Square::D8
+                };
+                self.bitboard.place_piece(self.turn_colour, Piece::Rook, rook_sq);
+                let (kingside, queenside) = match self.turn_colour {
+                    Colour::White => (CastlingSide::WhiteKingside, CastlingSide::WhiteQueenside),
+                    Colour::Black => (CastlingSide::BlackKingside, CastlingSide::BlackQueenside),
+                };
+                self.castling_rights.disable(kingside);
+                self.castling_rights.disable(queenside);
+                self.en_passant = None;
+                self.half_move_num += 1;
+            },
+            MoveType::MovePromotion(piece) => {
+                self.bitboard.place_piece(self.turn_colour, piece, move_.dest_sq);
+                self.en_passant = None;
+                self.half_move_num = 0;
+            },
+            MoveType::CapturePromotion(captured_piece, promotion_piece) => {
+                self.bitboard.remove_piece(!&self.turn_colour, captured_piece, move_.dest_sq);
+                self.bitboard.place_piece(self.turn_colour, promotion_piece, move_.dest_sq);
+                self.en_passant = None;
+                self.half_move_num = 0;
+            },
+            _ => {
+                panic!("Invalid move type");
+            }
+        }
         
+        // If the rook moves from its source square it voids castling rights on
+        // that side. Instead of doing this check we just do it for any piece
+        // moving from that square
+        // Same goes for moving TO the rook square, if it's a quiet move then
+        // the rook isn't there anymore, hence voiding rights. If it's capturing
+        // the rook then the castling rights are also voided
+        if move_.source_sq == Square::A1 || move_.dest_sq == Square::A1 {
+            self.castling_rights.disable(CastlingSide::WhiteQueenside);
+        } else if move_.source_sq == Square::H1 || move_.dest_sq == Square::H1 {
+            self.castling_rights.disable(CastlingSide::WhiteKingside);
+        } else if move_.source_sq == Square::A8 || move_.dest_sq == Square::A8 {
+            self.castling_rights.disable(CastlingSide::BlackQueenside);
+        } else if move_.source_sq == Square::H8 || move_.dest_sq == Square::H8 {
+            self.castling_rights.disable(CastlingSide::BlackKingside);
+        }
+        
+        self.turn_colour = !&self.turn_colour;
+        self.move_num = if self.turn_colour == Colour::Black {
+            self.move_num + 1
+        } else {
+            self.move_num
+        };
+        self.move_history.push(SavedMove{
+            move_,
+            prev_castling_rights: saved_castling,
+            prev_half_move_num: saved_half_move_num, 
+        });
     }
     
     pub fn undo_move(&mut self) {
@@ -76,6 +224,7 @@ pub enum CastlingSide {
     BlackKingside,
     BlackQueenside,
 }
+
 // bit position for each castling side is 1 << (CastlingSide as u32)
 // e.g. BlackKingside is 1 << 2 i.e. 0b00000100
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -98,6 +247,19 @@ impl CastlingRights {
     
     pub fn disable(&mut self, side: CastlingSide) {
         self.mask &= !(1u8 << side as u32);
+    }
+    
+    pub fn can_castle(&self, colour: Colour) -> (bool, bool) {
+        match colour {
+            Colour::White => {
+                (self.mask & 1u8 << CastlingSide::WhiteKingside as u32 != 0,
+                 self.mask & 1u8 << CastlingSide::WhiteQueenside as u32 != 0)
+            },
+            Colour::Black => {
+                (self.mask & 1u8 << CastlingSide::BlackKingside as u32 != 0,
+                 self.mask & 1u8 << CastlingSide::BlackQueenside as u32 != 0)
+            }
+        }
     }
 }
 

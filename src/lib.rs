@@ -19,6 +19,17 @@ pub enum Colour {
     Black,
 }
 
+impl std::ops::Not for &Colour {
+    type Output = Colour;
+
+    fn not(self) -> Self::Output {
+        match self {
+            Colour::White => Colour::Black,
+            Colour::Black => Colour::White,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Piece {
     Pawn,
