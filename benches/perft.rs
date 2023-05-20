@@ -5,8 +5,8 @@ use chess::Move;
 
 const TEST_CASES: &[(&str, u32, usize)] = &[
     // (fen, depth-to-search, expected value)
-    ("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1 ", 6, 0 /*119_060_324*/),
-    ("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1", 5, 0 /*193_690_690*/),
+    ("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1 ", 6, /*0*/ 119_060_324),
+    ("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1", 5, /*0*/ 193_690_690),
 ];
 
 fn perft(board: &mut Board, attack_table: &AttackTable, depth: u32) -> usize {

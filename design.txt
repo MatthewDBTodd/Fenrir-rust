@@ -154,3 +154,21 @@ additional moves types?: in rough order of strength (strongest first)
 - en-passant discovered double check 
 - en-passant discovered check 
 - quiet discovered check 
+
+castling:
+- once ANY king move is made, all castling rights are voided (including castling itself)
+- once the rook is moved, any castling rights on that side is voided
+- having the castling squares under attack does not void castling rights, only makes it illegal
+
+- any time a king move is made, set castling rights to false, regardless of their current value,
+is probably cheaper than checking each time
+- could void castling rights for every rook move, but need to know which side the rook originates
+- if castling rights are allowed, you KNOW the rook hasn't been moved yet on that side
+- if the rook is captured, castling rights are voided on that side
+- could simply void castling rights if ANY piece moves TO or FROM A1/H1/A8/H8
+- what about undoing a castling move? How do you restore castling rights? You don't know what state 
+they were in before...
+- this might be a problem with ANY move actually, as a capture or quiet move might void certain 
+castling rights...
+- means we might want to store the castling rights for each move in the move history?
+- encourages us to refactor castling rights to be a u8 bitmask instead of 4 booleans

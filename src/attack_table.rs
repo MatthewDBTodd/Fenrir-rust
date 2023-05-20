@@ -58,7 +58,28 @@ impl AttackTable {
     
     pub fn generate_legal_moves(&self, board: &Board, moves: &[Move; 256]) -> usize {
 
+        let board_status = self.get_board_status(&board.bitboard, board.turn_colour,);
+        
+        let occupied = board.bitboard.get_entire_mask();
+        
+        // first check if king is in double check
+        // means we only generate king moves
+        if board_status.king_attacking_pieces.len() == 2 {
+            let king_bitmask = board.bitboard.get_colour_piece_mask(Piece::King, board.turn_colour);
+            // pseudo-legal moves
+            let king_moves = self.get_single_piece_attacks(
+                Piece::King, 
+                board.turn_colour, 
+                king_bitmask,
+                occupied
+            );
+            // mask out danger squares
+            let king_moves = king_moves ^ board_status.danger_squares;
+        } else if board_status.king_attacking_pieces.len() == 1 {
+
+        }
         0usize 
+        
         /*
          * simple algorithm:
          * if king in check from 2 pieces:
@@ -110,6 +131,7 @@ impl AttackTable {
     
     // For a given piece type and a bitmask of a single source square, return
     // a bitmask of all the squares that piece attacks
+    // TODO: make the colour argument Option<Colour>, as only needed for pawns
     fn get_single_piece_attacks(
             &self, 
             piece: Piece, 

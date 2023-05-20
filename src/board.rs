@@ -6,10 +6,11 @@ use std::fmt;
 #[derive(Debug)]
 #[allow(dead_code)]
 pub struct Board {
-    bitboard: BitBoard,
-    turn_colour: Colour,
+    pub bitboard: BitBoard,
+    pub turn_colour: Colour,
     move_num: u32,
     half_move_num: u32,
+    // TODO: make castling rights a u8 bit mask
     castling_rights: CastlingRights,
     en_passant: Option<Square>,
     move_history: Vec<Move>,
