@@ -30,7 +30,7 @@ impl std::ops::Not for &Colour {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, FromPrimitive)]
 pub enum Piece {
     Pawn,
     King,
