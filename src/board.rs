@@ -10,12 +10,12 @@ pub struct Board {
     pub bitboard: BitBoard,
     // TODO: turn_colour can instead be calculated from half_move_num to save space?
     pub turn_colour: Colour,
-    move_num: u16,
-    half_move_num: u16,
-    castling_rights: CastlingRights,
-    en_passant: Option<Square>,
-    move_history: Vec<SavedMove>,
-    board_hash: u64,
+    pub move_num: u16,
+    pub half_move_num: u16,
+    pub castling_rights: CastlingRights,
+    pub en_passant: Option<Square>,
+    pub move_history: Vec<SavedMove>,
+    pub board_hash: u64,
 }
 
 const STARTING_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
