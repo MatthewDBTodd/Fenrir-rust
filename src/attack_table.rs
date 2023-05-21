@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 
+use num_traits::FromPrimitive;
+
 use crate::board::Board;
 use crate::pawn::PawnAttackTable;
 use crate::sliding_piece::Magic;
 use crate::{king, knight, Piece, Colour, Square};
-use crate::chess_move::Move;
+use crate::chess_move::{Move, MoveType};
 use crate::bitboard::BitBoard;
 
 pub struct AttackTable {
@@ -57,12 +59,13 @@ impl AttackTable {
         }
     }
     
-    pub fn generate_legal_moves(&self, board: &Board, moves: &[Move; 256]) -> usize {
+    pub fn generate_legal_moves(&self, board: &Board, moves: &mut [Move; 256]) -> usize {
 
         let board_status = self.get_board_status(&board.bitboard, board.turn_colour,);
         
         let occupied = board.bitboard.get_entire_mask();
         
+        let mut num_moves: usize = 0;
         // first check if king is in double check
         // means we only generate king moves
         if board_status.king_attacking_pieces.len() == 2 {
@@ -75,9 +78,43 @@ impl AttackTable {
                 occupied
             );
             // mask out danger squares
-            let king_moves = king_moves ^ board_status.danger_squares;
+            let mut king_moves = king_moves ^ (king_moves & board_status.danger_squares);
+            let source_sq: Square = FromPrimitive::from_u32(king_bitmask.trailing_zeros()).unwrap();
+            // captures in descending order of value
+            for piece in [Piece::Queen, Piece::Rook, Piece::Bishop, Piece::Knight, Piece::Pawn] {
+                let mut captures = king_moves & board.bitboard.get_colour_piece_mask(piece, !&board.turn_colour);
+                // remove the captures from the remaining king moves
+                king_moves ^= captures;
+                while captures != 0 {
+                    let dest_sq = captures & captures.wrapping_neg();
+                    captures ^= dest_sq;
+                    let dest_sq: Square = FromPrimitive::from_u32(dest_sq.trailing_zeros()).unwrap();
+                    moves[num_moves] = Move {
+                        source_sq,
+                        dest_sq,
+                        piece: Piece::King,
+                        move_type: MoveType::Capture(piece),
+                    };
+                    num_moves += 1;
+                }
+            }
+            
+            // king moves
+            while king_moves != 0 {
+                let dest_sq = king_moves & king_moves.wrapping_neg();
+                king_moves ^= dest_sq;
+                let dest_sq: Square = FromPrimitive::from_u32(dest_sq.trailing_zeros()).unwrap();
+                moves[num_moves] = Move {
+                    source_sq,
+                    dest_sq,
+                    piece: Piece::King,
+                    move_type: MoveType::Quiet,
+                };
+                num_moves += 1;
+            }
+            return num_moves;
         } else if board_status.king_attacking_pieces.len() == 1 {
-
+            
         }
         0usize 
         
