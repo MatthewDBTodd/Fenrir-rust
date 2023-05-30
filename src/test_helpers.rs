@@ -30,7 +30,7 @@ pub fn fen_to_hex(fen: &str) -> u64 {
 }
 
 // #[cfg(test)]
-pub fn hex_to_board(hex: u64) -> String {
+pub fn bitmask_to_board(hex: u64) -> String {
     let mut rv = String::new();
     writeln!(&mut rv).unwrap();
     let mut rank_idx = 56;
@@ -56,8 +56,8 @@ macro_rules! test_bitboard_eq {
             actual,
             "Test '{}' failed:\nExpected:{}\nActual:{}",
             $test_name,
-            hex_to_board(expected),
-            hex_to_board(actual)
+            bitmask_to_board(expected),
+            bitmask_to_board(actual)
         );
     }};
 }

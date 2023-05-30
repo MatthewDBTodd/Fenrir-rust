@@ -6,7 +6,6 @@ use std::fmt;
 
 struct PieceColour(Piece, Colour);
 
-#[derive(Default)]
 /*
  * As a chess board has 64 squares, we can efficiently represent using a u64,
  * using minimal space and allows us to use very efficient bitwise operators.
@@ -16,6 +15,7 @@ struct PieceColour(Piece, Colour);
  * Each piece has a u64 along with each colour, so if we want all white bishops
  * we AND the bishop mask with the white mask.
  */
+#[derive(Default, PartialEq)]
 pub struct BitBoard {
     // indexed by colour, i.e. white = 0, black = 1
     colours: [u64; 2],
@@ -66,7 +66,7 @@ impl BitBoard {
     pub fn place_piece(&mut self, colour: Colour, piece: Piece, square: Square) {
         let square_mask = get_square_mask(square);
 
-        debug_assert_eq!(self.get_entire_mask() & square_mask, 0);
+        // debug_assert_eq!(self.get_entire_mask() & square_mask, 0);
 
         let piece_mask = self.get_piece_mask(piece) | square_mask;
         self.set_piece_mask(piece, piece_mask);
@@ -79,8 +79,8 @@ impl BitBoard {
         let piece_mask = self.get_piece_mask(piece);
         let colour_mask = self.get_colour_mask(colour);
 
-        debug_assert_ne!(piece_mask & square_mask, 0);
-        debug_assert_ne!(colour_mask & square_mask, 0);
+        // debug_assert_ne!(piece_mask & square_mask, 0);
+        // debug_assert_ne!(colour_mask & square_mask, 0);
 
         self.set_piece_mask(piece, piece_mask ^ square_mask);
         self.set_colour_mask(colour, colour_mask ^ square_mask);
@@ -148,7 +148,7 @@ impl BitBoard {
                     break 'outer Piece::from(i);
                 }
             }
-            panic!("No piece found on that square");
+            panic!("No piece found on square {:?}", square);
         };
         char::from(PieceColour(piece, colour))
     }

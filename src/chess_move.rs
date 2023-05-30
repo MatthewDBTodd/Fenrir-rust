@@ -1,7 +1,7 @@
 use crate::{Square, Piece};
 use crate::board::CastlingRights;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 #[allow(dead_code)]
 pub struct Move {
     pub source_sq: Square,
@@ -10,7 +10,7 @@ pub struct Move {
     pub move_type: MoveType,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SavedMove {
     pub move_: Move,
     // castling rights before the move was made
@@ -20,17 +20,17 @@ pub struct SavedMove {
     pub prev_en_passant: Option<Square>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MoveType {
     Quiet,
-    Capture(Piece),
+    Capture(Piece), // done
     DoublePawnPush,
-    EnPassant,
-    CastleKingSide,
-    CastleQueenSide,
+    EnPassant, // done
+    CastleKingSide, // done
+    CastleQueenSide, // done
     MovePromotion(Piece),
     // captured piece first, then promotion piece
-    CapturePromotion(Piece, Piece),
+    CapturePromotion(Piece, Piece), // done
     ErrorMove,
 }
 

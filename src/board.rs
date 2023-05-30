@@ -18,6 +18,17 @@ pub struct Board {
     pub board_hash: u64,
 }
 
+// ignore move_history and board_hash
+impl PartialEq for Board {
+    fn eq(&self, other: &Self) -> bool {
+        self.bitboard == other.bitboard &&
+        self.turn_colour == other.turn_colour &&
+        self.move_num == other.move_num &&
+        self.castling_rights == other.castling_rights &&
+        self.en_passant == other.en_passant
+    }
+}
+
 const STARTING_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 impl Board {
@@ -90,17 +101,33 @@ impl Board {
             },
             MoveType::EnPassant => {
                 debug_assert!(self.en_passant.is_some());
-                self.bitboard.remove_piece(!&self.turn_colour, Piece::Pawn, self.en_passant.unwrap());
+                debug_assert!(self.en_passant.unwrap() == move_.dest_sq);
+                let captured_pawn_square = match self.en_passant.unwrap() {
+                    Square::A3 => Square::A4,
+                    Square::B3 => Square::B4,
+                    Square::C3 => Square::C4,
+                    Square::D3 => Square::D4,
+                    Square::E3 => Square::E4,
+                    Square::F3 => Square::F4,
+                    Square::G3 => Square::G4,
+                    Square::H3 => Square::H4,
+                    Square::A6 => Square::A5,
+                    Square::B6 => Square::B5,
+                    Square::C6 => Square::C5,
+                    Square::D6 => Square::D5,
+                    Square::E6 => Square::E5,
+                    Square::F6 => Square::F5,
+                    Square::G6 => Square::G5,
+                    Square::H6 => Square::H5,
+                    _ => panic!("Invalid en passant square"),
+                };
+                self.bitboard.remove_piece(!&self.turn_colour, Piece::Pawn, captured_pawn_square);
                 self.make_quiet_move(self.turn_colour, move_.source_sq, move_.dest_sq, move_.piece);
                 self.en_passant = None;
                 self.half_move_num = 0;
             },
             MoveType::CastleKingSide => {
                 debug_assert!(move_.piece == Piece::King);
-                debug_assert!((self.turn_colour == Colour::White && move_.source_sq == Square::E1)
-                            || self.turn_colour == Colour::Black && move_.source_sq == Square::E8);
-                debug_assert!((self.turn_colour == Colour::White && move_.dest_sq == Square::G1)
-                            || self.turn_colour == Colour::Black && move_.dest_sq == Square::G8);
 
                 self.make_quiet_move(self.turn_colour, move_.source_sq, move_.dest_sq, move_.piece);
                 let rook_source_sq = if self.turn_colour == Colour::White {
@@ -183,10 +210,21 @@ impl Board {
             self.castling_rights.disable(CastlingSide::BlackQueenside);
         } else if move_.source_sq == Square::H8 || move_.dest_sq == Square::H8 {
             self.castling_rights.disable(CastlingSide::BlackKingside);
+        
+        // Finally, if the king moves, just disable castling by default, easier 
+        // to do it whenever it moves rather than checking if it's already disabled
+        } else if move_.piece == Piece::King {
+            if self.turn_colour == Colour::White {
+                self.castling_rights.disable(CastlingSide::WhiteKingside);
+                self.castling_rights.disable(CastlingSide::WhiteQueenside);
+            } else {
+                self.castling_rights.disable(CastlingSide::BlackKingside);
+                self.castling_rights.disable(CastlingSide::BlackQueenside);
+            }
         }
         
         self.turn_colour = !&self.turn_colour;
-        self.move_num = if self.turn_colour == Colour::Black {
+        self.move_num = if self.turn_colour == Colour::White {
             self.move_num + 1
         } else {
             self.move_num
@@ -220,35 +258,57 @@ impl Board {
             MoveType::EnPassant => {
                 self.make_quiet_move(!&self.turn_colour, saved_move.move_.dest_sq,
                     saved_move.move_.source_sq, saved_move.move_.piece);
-                self.bitboard.place_piece(self.turn_colour, Piece::Pawn, saved_move.prev_en_passant.unwrap());
+
+                let captured_pawn_square = match saved_move.prev_en_passant.unwrap() {
+                    Square::A3 => Square::A4,
+                    Square::B3 => Square::B4,
+                    Square::C3 => Square::C4,
+                    Square::D3 => Square::D4,
+                    Square::E3 => Square::E4,
+                    Square::F3 => Square::F4,
+                    Square::G3 => Square::G4,
+                    Square::H3 => Square::H4,
+                    Square::A6 => Square::A5,
+                    Square::B6 => Square::B5,
+                    Square::C6 => Square::C5,
+                    Square::D6 => Square::D5,
+                    Square::E6 => Square::E5,
+                    Square::F6 => Square::F5,
+                    Square::G6 => Square::G5,
+                    Square::H6 => Square::H5,
+                    _ => panic!("Invalid en passant square"),
+                };
+                self.bitboard.place_piece(self.turn_colour, Piece::Pawn, captured_pawn_square);
             },
             MoveType::CastleKingSide => {
                 self.make_quiet_move(!&self.turn_colour, saved_move.move_.dest_sq,
                     saved_move.move_.source_sq, saved_move.move_.piece);
+                // As the turn_colour is now the opposite colour the source/dest squares are flipped
                 let rook_source_sq = if self.turn_colour == Colour::White {
-                    Square::F1
-                } else {
                     Square::F8
+                } else {
+                    Square::F1
                 };
                 let rook_dest_sq = if self.turn_colour == Colour::White {
-                    Square::H1
-                } else {
                     Square::H8
+                } else {
+                    Square::H1
                 };
                 self.make_quiet_move(!&self.turn_colour, rook_source_sq, rook_dest_sq, Piece::Rook);
             },
             MoveType::CastleQueenSide => {
                 self.make_quiet_move(!&self.turn_colour, saved_move.move_.dest_sq,
                     saved_move.move_.source_sq, saved_move.move_.piece);
+                // As the turn_colour is now the opposite colour the source/dest squares are flipped
                 let rook_source_sq = if self.turn_colour == Colour::White {
-                    Square::D1
-                } else {
                     Square::D8
+                } else {
+                    Square::D1
                 };
                 let rook_dest_sq = if self.turn_colour == Colour::White {
-                    Square::A1
-                } else {
                     Square::A8
+                } else {
+                    Square::A1
                 };
                 self.make_quiet_move(!&self.turn_colour, rook_source_sq, rook_dest_sq, Piece::Rook);
             },
@@ -267,7 +327,7 @@ impl Board {
         self.half_move_num = saved_move.prev_half_move_num;
         self.castling_rights = saved_move.prev_castling_rights;
         self.turn_colour = !&self.turn_colour;
-        self.move_num = if self.turn_colour == Colour::White {
+        self.move_num = if self.turn_colour == Colour::Black {
             self.move_num - 1
         } else {
             self.move_num
@@ -587,5 +647,233 @@ mod tests {
         assert_eq!(board.en_passant, None);
         assert_eq!(board.move_history.len(), 0);
         assert_eq!(board.board_hash, 0);
+    }
+
+    #[test]
+    fn test_quiet_move() {
+        let expected_fen = "rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 1 1";
+        let expected_board = Board::new(Some(expected_fen)).unwrap();
+
+        let mut actual_board = Board::new(None).unwrap();
+
+        actual_board.make_move(Move {
+            source_sq: Square::G1,
+            dest_sq: Square::F3,
+            piece: Piece::Knight,
+            move_type: MoveType::Quiet,
+        });
+        assert_eq!(expected_board, actual_board);
+
+        let expected_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+        let expected_board = Board::new(Some(expected_fen)).unwrap();
+
+        actual_board.undo_move();
+        assert_eq!(expected_board, actual_board);
+    }
+
+    #[test]
+    fn test_capture() {
+        let expected_fen = "rnbqkb1r/ppp1pppp/5n2/8/2BP4/4P3/PP3PPP/RNBQK1NR b KQkq - 0 4";
+        let expected_board = Board::new(Some(expected_fen)).unwrap();
+
+        let starting_fen = "rnbqkb1r/ppp1pppp/5n2/8/2pP4/4P3/PP3PPP/RNBQKBNR w KQkq - 1 4";
+        let mut actual_board = Board::new(Some(starting_fen)).unwrap();
+
+        actual_board.make_move(Move {
+            source_sq: Square::F1,
+            dest_sq: Square::C4,
+            piece: Piece::Bishop,
+            move_type: MoveType::Capture(Piece::Pawn),
+        });
+        assert_eq!(expected_board, actual_board);
+
+        let expected_board = Board::new(Some(starting_fen)).unwrap();
+        
+        actual_board.undo_move();
+        assert_eq!(expected_board, actual_board);
+    }
+    
+    #[test]
+    fn test_double_pawn_push() {
+        let expected_fen = "rnbqkbnr/pp1ppppp/8/8/2pP1P2/4P3/PPP3PP/RNBQKBNR b KQkq d3 0 3";
+        let expected_board = Board::new(Some(expected_fen)).unwrap();
+
+        let starting_fen = "rnbqkbnr/pp1ppppp/8/8/2p2P2/4P3/PPPP2PP/RNBQKBNR w KQkq - 0 3";
+        let mut actual_board = Board::new(Some(starting_fen)).unwrap();
+
+        actual_board.make_move(Move {
+            source_sq: Square::D2,
+            dest_sq: Square::D4,
+            piece: Piece::Pawn,
+            move_type: MoveType::DoublePawnPush,
+        });
+
+        assert_eq!(expected_board, actual_board);
+
+        let expected_board = Board::new(Some(starting_fen)).unwrap();
+        
+        actual_board.undo_move();
+        assert_eq!(expected_board, actual_board);
+    }
+
+    #[test]
+    fn test_en_passant() {
+        let expected_fen = "rnbqkbnr/p1p1pppp/1p1P4/8/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 3";
+        let expected_board = Board::new(Some(expected_fen)).unwrap();
+
+        let starting_fen = "rnbqkbnr/p1p1pppp/1p6/3pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 3";
+        let mut actual_board = Board::new(Some(starting_fen)).unwrap();
+
+        actual_board.make_move(Move {
+            source_sq: Square::E5,
+            dest_sq: Square::D6,
+            piece: Piece::Pawn,
+            move_type: MoveType::EnPassant,
+        });
+
+        assert_eq!(expected_board, actual_board);
+
+        let expected_board = Board::new(Some(starting_fen)).unwrap();
+        
+        actual_board.undo_move();
+        assert_eq!(expected_board, actual_board);
+    }
+
+    #[test]
+    fn test_castle_kingside_white() {
+        let expected_fen = "r1bqkb1r/pppp1ppp/2n2n2/1B2p3/4P3/5N2/PPPP1PPP/RNBQ1RK1 b kq - 5 4";
+        let expected_board = Board::new(Some(expected_fen)).unwrap();
+
+        let starting_fen = "r1bqkb1r/pppp1ppp/2n2n2/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4";
+        let mut actual_board = Board::new(Some(starting_fen)).unwrap();
+
+        actual_board.make_move(Move {
+            source_sq: Square::E1,
+            dest_sq: Square::G1,
+            piece: Piece::King,
+            move_type: MoveType::CastleKingSide,
+        });
+
+        assert_eq!(expected_board, actual_board);
+
+        let expected_board = Board::new(Some(starting_fen)).unwrap();
+        
+        actual_board.undo_move();
+        assert_eq!(expected_board, actual_board);
+    }
+
+    #[test]
+    fn test_castle_kingside_black() {
+        let expected_fen = "r1bq1rk1/pppp1ppp/2n2n2/1Bb1p3/4P3/3P1N2/PPP2PPP/RNBQ1RK1 w - - 1 6";
+        let expected_board = Board::new(Some(expected_fen)).unwrap();
+
+        let starting_fen = "r1bqk2r/pppp1ppp/2n2n2/1Bb1p3/4P3/3P1N2/PPP2PPP/RNBQ1RK1 b kq - 0 5";
+        let mut actual_board = Board::new(Some(starting_fen)).unwrap();
+
+        actual_board.make_move(Move {
+            source_sq: Square::E8,
+            dest_sq: Square::G8,
+            piece: Piece::King,
+            move_type: MoveType::CastleKingSide,
+        });
+
+        assert_eq!(expected_board, actual_board);
+
+        let expected_board = Board::new(Some(starting_fen)).unwrap();
+        
+        actual_board.undo_move();
+        assert_eq!(expected_board, actual_board);
+    }
+
+    #[test]
+    fn test_castle_queenside_white() {
+        let expected_fen = "r3kbnr/pppqpppp/2n5/3p1b2/3P1B2/2N5/PPPQPPPP/2KR1BNR b kq - 7 5";
+        let expected_board = Board::new(Some(expected_fen)).unwrap();
+
+        let starting_fen = "r3kbnr/pppqpppp/2n5/3p1b2/3P1B2/2N5/PPPQPPPP/R3KBNR w KQkq - 6 5";
+        let mut actual_board = Board::new(Some(starting_fen)).unwrap();
+
+        actual_board.make_move(Move {
+            source_sq: Square::E1,
+            dest_sq: Square::C1,
+            piece: Piece::King,
+            move_type: MoveType::CastleQueenSide,
+        });
+
+        assert_eq!(expected_board, actual_board);
+
+        let expected_board = Board::new(Some(starting_fen)).unwrap();
+        
+        actual_board.undo_move();
+        assert_eq!(expected_board, actual_board);
+    }
+
+    #[test]
+    fn test_castle_queenside_black() {
+        let expected_fen = "2kr1bnr/pppqpppp/2n5/3p1b2/3P1B2/2N5/PPPQPPPP/2KR1BNR w - - 8 6";
+        let expected_board = Board::new(Some(expected_fen)).unwrap();
+
+        let starting_fen = "r3kbnr/pppqpppp/2n5/3p1b2/3P1B2/2N5/PPPQPPPP/2KR1BNR b kq - 7 5";
+        let mut actual_board = Board::new(Some(starting_fen)).unwrap();
+
+        actual_board.make_move(Move {
+            source_sq: Square::E8,
+            dest_sq: Square::C8,
+            piece: Piece::King,
+            move_type: MoveType::CastleQueenSide,
+        });
+
+        assert_eq!(expected_board, actual_board);
+
+        let expected_board = Board::new(Some(starting_fen)).unwrap();
+        
+        actual_board.undo_move();
+        assert_eq!(expected_board, actual_board);
+    }
+
+    #[test]
+    fn test_move_promotion() {
+        let expected_fen = "r1bqkbQr/ppppp2p/2n2n2/8/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 5";
+        let expected_board = Board::new(Some(expected_fen)).unwrap();
+
+        let starting_fen = "r1bqkb1r/ppppp1Pp/2n2n2/8/8/8/PPPP1PPP/RNBQKBNR w KQkq - 1 5";
+        let mut actual_board = Board::new(Some(starting_fen)).unwrap();
+
+        actual_board.make_move(Move {
+            source_sq: Square::G7,
+            dest_sq: Square::G8,
+            piece: Piece::Pawn,
+            move_type: MoveType::MovePromotion(Piece::Queen),
+        });
+
+        assert_eq!(expected_board, actual_board);
+
+        let expected_board = Board::new(Some(starting_fen)).unwrap();
+        
+        actual_board.undo_move();
+        assert_eq!(expected_board, actual_board);
+    }
+
+    #[test]
+    fn test_capture_promotion() {
+        let expected_fen = "rnbqkbnr/pppp1ppp/8/8/8/2N1PN2/P4PPP/r1BQKB1R w Kkq - 0 6";
+        let expected_board = Board::new(Some(expected_fen)).unwrap();
+
+        let starting_fen = "rnbqkbnr/pppp1ppp/8/8/8/2N1PN2/Pp3PPP/R1BQKB1R b KQkq - 1 5";
+        let mut actual_board = Board::new(Some(starting_fen)).unwrap();
+
+        actual_board.make_move(Move {
+            source_sq: Square::B2,
+            dest_sq: Square::A1,
+            piece: Piece::Pawn,
+            move_type: MoveType::CapturePromotion(Piece::Rook, Piece::Rook),
+        });
+
+        assert_eq!(expected_board, actual_board);
+
+        let expected_board = Board::new(Some(starting_fen)).unwrap();
+        
+        actual_board.undo_move();
+        assert_eq!(expected_board, actual_board);
     }
 }

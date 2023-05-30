@@ -2,7 +2,7 @@ use crate::{Piece, Square};
 use rand::Rng;
 use rand::rngs::ThreadRng;
 use crate::masks::*;
-use crate::test_helpers::hex_to_board;
+use crate::test_helpers::bitmask_to_board;
 
 /*
  * attacks: a vector of size 2^n, where n is the number of set bits in the mask.
