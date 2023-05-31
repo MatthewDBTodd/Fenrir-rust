@@ -485,17 +485,20 @@ impl AttackTable {
                             !&board.turn_colour,
                         );
 
-                        // doesn't result in check, is therefore legal
-                        if rook_horizontal_attacks & rook_queen_mask == 0 {
-                            moves[num_moves] = Move {
-                                source_sq: FromPrimitive::from_u32(ep_capture.trailing_zeros()).unwrap(),
-                                dest_sq: ep_square,
-                                piece: Piece::Pawn,
-                                move_type: MoveType::EnPassant,
-                            };                        
-                            num_moves += 1;
+                        // results in check, that's illegal
+                        if rook_horizontal_attacks & rook_queen_mask != 0 {
+                            continue;
                         }
                     }
+
+                    // if reaching this point, all legality checks for en-passant have passed
+                    moves[num_moves] = Move {
+                        source_sq: FromPrimitive::from_u32(ep_capture.trailing_zeros()).unwrap(),
+                        dest_sq: ep_square,
+                        piece: Piece::Pawn,
+                        move_type: MoveType::EnPassant,
+                    };                        
+                    num_moves += 1;
                 }
             }
         }
@@ -518,6 +521,7 @@ impl AttackTable {
                     board.bitboard.get_colour_mask(!&board.turn_colour),
                 );
                 
+                // TODO, can skip this loop if captures == 0
                 // in reverse order of piece value
                 for captured_piece_type in [Piece::Queen, Piece::Rook, Piece::Bishop, Piece::Knight, Piece::Pawn] {
                     let mut all_captures_of_piece = captures & board.bitboard.get_colour_piece_mask(
@@ -689,6 +693,20 @@ impl AttackTable {
                             };
                             num_moves += 1;
                         }
+                    } else if piece_type == Piece::Pawn && 
+                        (
+                            (one_piece & 0xFF00 != 0 && quiet_move & 0xFF000000 != 0) ||
+                            (one_piece & 0xFF000000000000 != 0 && quiet_move & 0xFF00000000 != 0)
+                        ) {
+                        // println!("fuckers {}", num_moves);
+                        moves[num_moves] = Move {
+                            source_sq,
+                            dest_sq,
+                            piece: piece_type,
+                            move_type: MoveType::DoublePawnPush,
+                        };
+                        // println!("{:?}", moves[num_moves]);
+                        num_moves += 1;
                     } else {
                         moves[num_moves] = Move {
                             source_sq,
@@ -701,7 +719,32 @@ impl AttackTable {
                 }
             }
         }
-        
+
+        // king moves
+        let king_position = board.bitboard.get_colour_piece_mask(Piece::King, board.turn_colour);
+        assert!(king_position.is_power_of_two());
+        let source_sq: Square = FromPrimitive::from_u32(king_position.trailing_zeros()).unwrap();
+        let quiet_king_moves = self.get_single_piece_moves(
+            Piece::King,
+            board.turn_colour,
+            king_position,
+            occupied,
+        );
+        let mut quiet_king_moves = quiet_king_moves & !board_status.danger_squares;
+
+        while quiet_king_moves != 0 {
+            let king_move = quiet_king_moves & quiet_king_moves.wrapping_neg();
+            quiet_king_moves ^= king_move;
+            let dest_sq = FromPrimitive::from_u32(king_move.trailing_zeros()).unwrap();
+
+            moves[num_moves] = Move {
+                source_sq,
+                dest_sq,
+                piece: Piece::King,
+                move_type: MoveType::Quiet,
+            };
+            num_moves +=1;
+        }
         num_moves
             
         /*
@@ -843,6 +886,15 @@ impl AttackTable {
                             | self.rook_attacks[idx].get_attacks(occupied),
             
         };
+        // if not a power of two then it's a double pawn push square, so have to 
+        // check if the pawn is blocked, to prevent bunny hopping pawns
+        if piece == Piece::Pawn && !pseudo_moves.is_power_of_two() {
+            if colour == Colour::White && ((source_sq_mask << 8) & occupied != 0) {
+                return 0u64;
+            } else if colour == Colour::Black && ((source_sq_mask >> 8) & occupied != 0) {
+                return 0u64;
+            }
+        } 
         pseudo_moves & !occupied
     }
     

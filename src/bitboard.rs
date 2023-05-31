@@ -118,14 +118,19 @@ impl BitBoard {
         self.pieces
     }
     
-    pub fn get_piece_type_from_mask(&self, mask: u64) -> Piece {
+    pub fn get_piece_type_from_mask(&self, mask: u64) -> Option<Piece> {
         debug_assert!(mask.is_power_of_two());
         for (i, piece_mask) in self.pieces.iter().enumerate() {
             if mask & piece_mask != 0 {
-                return FromPrimitive::from_usize(i).unwrap();
+                return FromPrimitive::from_usize(i);
             }
         }
-        panic!("Something has cocked up");
+        None
+    }
+
+    pub fn get_piece_type_for_square(&self, square: Square) -> Option<Piece> {
+        let mask = 1 << square as u32;
+        self.get_piece_type_from_mask(mask)
     }
 
     // Fen represents white pieces with uppercase and black with lowercase
