@@ -173,7 +173,7 @@ impl AttackTable {
                     // for each piece, should only be one way to capture the checking piece
                     assert!(captures_of_checking_piece.is_power_of_two());
 
-                    let source_sq: Square = FromPrimitive::from_u32(captures_of_checking_piece.trailing_zeros()).unwrap();
+                    let source_sq: Square = FromPrimitive::from_u32(one_piece.trailing_zeros()).unwrap();
                     
                     // Means we can capture the checking piece via pawn capture-promotion. Hooray!
                     if piece_type == Piece::Pawn && 
@@ -196,6 +196,59 @@ impl AttackTable {
                             move_type: MoveType::Capture(checking_piece)
                         };
                         num_moves += 1;
+                    }
+                }
+            }
+
+            // en-passant captures. If EP of the checking pawn is possible, we don't need to check 
+            // for the awkward revealed check when both pawns move from ep, as the king is already
+            // in check from the double pawn pushing pawn
+            if let Some(ep_square) = board.en_passant {
+                let double_push_pawn = match ep_square {
+                    Square::A3 => Square::A4,
+                    Square::B3 => Square::B4,
+                    Square::C3 => Square::C4,
+                    Square::D3 => Square::D4,
+                    Square::E3 => Square::E4,
+                    Square::F3 => Square::F4,
+                    Square::G3 => Square::G4,
+                    Square::H3 => Square::H4,
+                    Square::A6 => Square::A5,
+                    Square::B6 => Square::B5,
+                    Square::C6 => Square::C5,
+                    Square::D6 => Square::D5,
+                    Square::E6 => Square::E5,
+                    Square::F6 => Square::F5,
+                    Square::G6 => Square::G5,
+                    Square::H6 => Square::H5,
+                    _ => panic!("Invalid en passant square"),
+                };
+                let ep_square_mask = 1 << (ep_square as u32);
+                let double_push_pawn_mask = 1 << (double_push_pawn as u32);
+                // means the double pushing pawn is the one checking the king, check if we can ep it
+                if double_push_pawn_mask & checking_piece_mask != 0 {
+                    // as we only want the intersection with pawns we make the last argument just the pawn mask
+                    let mut ep_captures = self.get_single_piece_captures(
+                        Piece::Pawn,
+                        !&board.turn_colour,
+                        ep_square_mask,
+                        occupied,
+                        board.bitboard.get_colour_piece_mask(Piece::Pawn, board.turn_colour),
+                    );
+
+                    while ep_captures != 0 {
+                        let ep_capture = ep_captures & ep_captures.wrapping_neg();
+                        ep_captures ^= ep_capture;
+
+                        if ep_capture & board_status.pinned_pieces == 0 {
+                            moves[num_moves] = Move {
+                                source_sq: FromPrimitive::from_u32(ep_capture.trailing_zeros()).unwrap(),
+                                dest_sq: ep_square,
+                                piece: Piece::Pawn,
+                                move_type: MoveType::EnPassant,
+                            };
+                            num_moves += 1;
+                        }
                     }
                 }
             }
@@ -296,16 +349,28 @@ impl AttackTable {
                     while all_pieces != 0 {
                         let one_piece = all_pieces & all_pieces.wrapping_neg();
                         all_pieces ^= one_piece;
-                        let mut piece_moves = self.get_single_piece_moves(
+                        let piece_moves = self.get_single_piece_moves(
                             piece_type,
                             board.turn_colour,
                             one_piece,
                             occupied,
                         ) & block_squares;
 
+                        let mut piece_moves = if one_piece & board_status.pinned_pieces != 0 {
+                            let pseudo_legal_squares = board_status.pinned_pseudo_legal_squares
+                                .iter()
+                                .find(|&&(first, _)| first == one_piece)
+                                .map(|&(_, second)| second)
+                                .unwrap();
+                            piece_moves & pseudo_legal_squares
+                        } else {
+                            piece_moves
+                        };
+
                         while piece_moves != 0 {
                             let piece_move = piece_moves & piece_moves.wrapping_neg();
                             piece_moves ^= piece_move;
+
                             let source_sq: Square = FromPrimitive::from_u32(one_piece.trailing_zeros()).unwrap();
                             let dest_sq: Square = FromPrimitive::from_u32(piece_move.trailing_zeros()).unwrap();
                             
@@ -322,6 +387,19 @@ impl AttackTable {
                                     };
                                     num_moves += 1;
                                 }
+                            } else if piece_type == Piece::Pawn &&
+                                (
+                                    (one_piece & 0xFF00 != 0 && piece_move & 0xFF000000 != 0) ||
+                                    (one_piece & 0xFF000000000000 != 0 && piece_move & 0xFF00000000 != 0)
+                                ) {
+                                // println!("asdf");
+                                moves[num_moves] = Move {
+                                    source_sq,
+                                    dest_sq,
+                                    piece: piece_type,
+                                    move_type: MoveType::DoublePawnPush,
+                                };
+                                num_moves += 1;
                             } else {
                                 moves[num_moves] = Move {
                                     source_sq,
@@ -400,6 +478,14 @@ impl AttackTable {
                 board.bitboard.get_colour_piece_mask(Piece::Pawn, board.turn_colour),
             );
             
+            // If there's two pawns that can perform en-passant, then we don't need to check for 
+            // legality. 
+            // For example, the position 7K/8/8/8/k2pPp1R/8/8/8 b - e3 0 1 whichever of the two black
+            // pawns does ep still leaves one blocking check.
+            // But 7K/8/8/8/k2pP2R/8/8/8 b - e3 0 1 has only one possible pawn that can do ep, and
+            // doing it would leave its own king in check
+            let needs_extra_legality_check = ep_captures.is_power_of_two();
+
             while ep_captures != 0 {
                 let ep_capture = ep_captures & ep_captures.wrapping_neg();
                 ep_captures ^= ep_capture;
@@ -428,14 +514,6 @@ impl AttackTable {
                     };                        
                     num_moves += 1;
                 } else {
-                    // If there's two pawns that can perform en-passant, then we don't need to check for 
-                    // legality. 
-                    // For example, the position 7K/8/8/8/k2pPp1R/8/8/8 b - e3 0 1 whichever of the two black
-                    // pawns does ep still leaves one blocking check.
-                    // But 7K/8/8/8/k2pP2R/8/8/8 b - e3 0 1 has only one possible pawn that can do ep, and
-                    // doing it would leave its own king in check
-                    let needs_extra_legality_check = ep_captures.is_power_of_two();
-
                     // now check for illegality if both pawns are pinned
                     if needs_extra_legality_check {
                         // get the mask of the two pawns involved and remove from occupied, then see if 
@@ -459,12 +537,15 @@ impl AttackTable {
                             Square::H6 => 1 << Square::H5 as u32,
                             _ => panic!("invalid en passant square"),
                         };
+                        // println!("occupied = {}", bitmask_to_board(occupied));
                         let occupied_tmp = occupied & !(ep_capture | ep_target_pawn_mask);
+                        // println!("occupied_tmp = {}", bitmask_to_board(occupied_tmp));
                         
                         let king_mask = board.bitboard.get_colour_piece_mask(
                             Piece::King,
                             board.turn_colour,
                         );
+                        // println!("king mask = {}", bitmask_to_board(king_mask));
                         
                         let king_idx = king_mask.trailing_zeros() as usize;
 
@@ -472,15 +553,15 @@ impl AttackTable {
                         // if removing both pawns reveals check, that can only happen horizontally
                         let rook_horizontal_attacks = self.get_single_piece_pseudo_attacks(
                             Piece::Rook, 
-                            board.turn_colour, 
+                            !&board.turn_colour, 
                             king_mask, 
                             occupied_tmp
-                        ) & EAST[king_idx] & WEST[king_idx];
-                        
+                        ) & (EAST[king_idx] | WEST[king_idx]);
+
                         let rook_queen_mask = board.bitboard.get_colour_piece_mask(
                             Piece::Rook,
                             !&board.turn_colour,
-                        ) & board.bitboard.get_colour_piece_mask(
+                        ) | board.bitboard.get_colour_piece_mask(
                             Piece::Queen,
                             !&board.turn_colour,
                         );
@@ -950,22 +1031,30 @@ impl AttackTable {
     fn get_legal_castling_rights(&self, board: &Board, board_status: &BoardStatus) -> (bool, bool) {
         let (mut kingside, mut queenside) = board.castling_rights.can_castle(board.turn_colour);
         
+        // For castling we have to check that:
+        // 1. The intermediate squares between the king and rook are empty
+        // 2. The intermediate squares the king travels are not under attack
+        // For kingside castling, those squares are the same, but for queenside
+        // castling they are not. i.e. for white queenside castling b1 c1 and d1
+        // need to be vacated, but only c1 and d1 need to be unattacked, you can
+        // still queenside castle if b1 is under attack as the king does not traverse
+        // it
         if kingside {
-            let castle_squares: u64 = match board.turn_colour {
+            let king_travel_squares: u64 = match board.turn_colour {
                 Colour::White => 0x60,
                 Colour::Black => 0x6000000000000000,
             };
-            kingside = castle_squares & board.bitboard.get_entire_mask() == 0 
-                    && castle_squares & board_status.danger_squares == 0;
+            kingside = king_travel_squares & board.bitboard.get_entire_mask() == 0 
+                    && king_travel_squares & board_status.danger_squares == 0;
         }
         
         if queenside {
-            let castle_squares: u64 = match board.turn_colour {
-                Colour::White => 0xC,
-                Colour::Black => 0xC00000000000000,                
+            let (in_between_squares, king_travel_squares): (u64, u64) = match board.turn_colour {
+                Colour::White => (0xE, 0xC),
+                Colour::Black => (0xE00000000000000, 0xC00000000000000),
             };
-            queenside = castle_squares & board.bitboard.get_entire_mask() == 0
-                     && castle_squares & board_status.danger_squares == 0;
+            queenside = in_between_squares & board.bitboard.get_entire_mask() == 0
+                     && king_travel_squares & board_status.danger_squares == 0;
         }
         
         (kingside, queenside)

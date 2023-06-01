@@ -17,6 +17,7 @@ def main():
                 result |= (1 << shift)
                 shift -= 1
     print(hex(result))
+    print(result)
     pyperclip.copy(hex(result))
     
 

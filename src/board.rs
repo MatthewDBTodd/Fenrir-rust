@@ -35,16 +35,27 @@ impl Board {
     pub fn new(fen: Option<&str>) -> Result<Board, &'static str> {
         let fen = fen.unwrap_or(STARTING_FEN);
         let parts: Vec<&str> = fen.split_ascii_whitespace().collect();
-        if parts.len() != 6 {
-            return Err("Error: fen string does not contain the required 6 parts");
+        if parts.len() < 4 {
+            return Err("Error: fen string does not contain the required 4 parts");
         }
-        let Ok(half_move_num) = parts[4].parse::<u16>() else {
-            return Err("Error: invalid half move num in fen string");
+        let half_move_num = if parts.len() >= 5 {
+            match parts[4].parse::<u16>() {
+                Ok(n) => n,
+                Err(e) => panic!("{e}"),
+            }
+        } else {
+            0
         };
 
-        let Ok(move_num) = parts[5].parse::<u16>() else {
-            return Err("Error: invalid move num in fen string");
+        let move_num = if parts.len() >= 6 {
+            match parts[5].parse::<u16>() {
+                Ok(n) => n,
+                Err(e) => panic!("{e}"),
+            }
+        } else {
+            1
         };
+
         Ok(Board {
             bitboard: BitBoard::try_from(parts[0])?,
             turn_colour: Colour::try_from(parts[1])?,
