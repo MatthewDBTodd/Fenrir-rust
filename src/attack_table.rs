@@ -50,6 +50,25 @@ pub struct BoardStatus {
     check_squares: [u64; 6],
 }
 
+struct MoveList<'a> {
+    moves: &'a mut [Move; 256],
+    num_moves: usize,
+}
+
+impl<'a> MoveList<'a> {
+    fn new(moves: &'a mut [Move; 256]) -> Self {
+        Self {
+            moves,
+            num_moves: 0,
+        }
+    }
+
+    fn push(&mut self, chess_move: Move) {
+        self.moves[self.num_moves] = chess_move;
+        self.num_moves += 1;
+    }
+}
+
 impl AttackTable {
     pub fn init() -> Self {
         let pawn = PawnAttackTable::init();
@@ -65,13 +84,13 @@ impl AttackTable {
     
     pub fn generate_legal_moves(&self, board: &Board, moves: &mut [Move; 256]) -> usize {
 
+        let mut moves = MoveList::new(moves);
         let board_status = self.get_board_status(&board.bitboard, board.turn_colour,);
         
         let occupied = board.bitboard.get_entire_mask();
         
         let enemy_colour_mask = board.bitboard.get_colour_mask(!&board.turn_colour);
         
-        let mut num_moves: usize = 0;
         // first check if king is in double check
         // means we only generate king moves
         if board_status.num_checking_pieces == 2 {
@@ -99,13 +118,12 @@ impl AttackTable {
                     let dest_sq = piece_captures & piece_captures.wrapping_neg();
                     piece_captures ^= dest_sq;
                     let dest_sq: Square = FromPrimitive::from_u32(dest_sq.trailing_zeros()).unwrap();
-                    moves[num_moves] = Move {
+                    moves.push(Move {
                         source_sq: king_source_sq,
                         dest_sq,
                         piece: Piece::King,
                         move_type: MoveType::Capture(captured_piece),
-                    };
-                    num_moves += 1;
+                    });
                 }
             }
             
@@ -123,16 +141,15 @@ impl AttackTable {
                 let dest_sq = king_moves & king_moves.wrapping_neg();
                 king_moves ^= dest_sq;
                 let dest_sq: Square = FromPrimitive::from_u32(dest_sq.trailing_zeros()).unwrap();
-                moves[num_moves] = Move {
+                moves.push(Move {
                     source_sq: king_source_sq,
                     dest_sq,
                     piece: Piece::King,
                     move_type: MoveType::Quiet,
-                };
-                num_moves += 1;
+                });
             }
             
-            return num_moves;            
+            return moves.num_moves;
 
         /*
          * Ways to get out of a single check:
@@ -180,22 +197,20 @@ impl AttackTable {
                         (checking_piece_mask & 0xFF00000000000000 != 0 || checking_piece_mask & 0xFF != 0) {
 
                         for promotion_piece in [Piece::Queen, Piece::Rook, Piece::Bishop, Piece::Knight] {
-                            moves[num_moves] = Move {
+                            moves.push(Move {
                                 source_sq,
                                 dest_sq: checking_piece_sq,
                                 piece: piece_type,
                                 move_type: MoveType::CapturePromotion(checking_piece, promotion_piece), 
-                            };
-                            num_moves += 1;
+                            });
                         }
                     } else {
-                        moves[num_moves] = Move {
+                        moves.push(Move {
                             source_sq,
                             dest_sq: checking_piece_sq,
                             piece: piece_type,
                             move_type: MoveType::Capture(checking_piece)
-                        };
-                        num_moves += 1;
+                        });
                     }
                 }
             }
@@ -241,13 +256,12 @@ impl AttackTable {
                         ep_captures ^= ep_capture;
 
                         if ep_capture & board_status.pinned_pieces == 0 {
-                            moves[num_moves] = Move {
+                            moves.push(Move {
                                 source_sq: FromPrimitive::from_u32(ep_capture.trailing_zeros()).unwrap(),
                                 dest_sq: ep_square,
                                 piece: Piece::Pawn,
                                 move_type: MoveType::EnPassant,
-                            };
-                            num_moves += 1;
+                            });
                         }
                     }
                 }
@@ -277,13 +291,12 @@ impl AttackTable {
                         let king_capture = all_captures & all_captures.wrapping_neg();
                         all_captures ^= king_capture;
                         let dest_sq: Square = FromPrimitive::from_u32(king_capture.trailing_zeros()).unwrap();       
-                        moves[num_moves] = Move {
+                        moves.push(Move {
                             source_sq,
                             dest_sq,
                             piece: Piece::King,
                             move_type: MoveType::Capture(piece_type),
-                        };
-                        num_moves += 1;
+                        });
                     }
                 }
             }
@@ -307,13 +320,12 @@ impl AttackTable {
                         let ep_capture = ep_captures & ep_captures.wrapping_neg();
                         ep_captures ^= ep_capture;
                         let source_sq: Square = FromPrimitive::from_u32(ep_capture.trailing_zeros()).unwrap();
-                        moves[num_moves] = Move {
+                        moves.push(Move {
                             source_sq,
                             dest_sq: ep_sq,
                             piece: Piece::Pawn,
                             move_type: MoveType::EnPassant,
-                        };
-                        num_moves += 1;
+                        });
                     }
                 },
                 _ => {},
@@ -332,13 +344,12 @@ impl AttackTable {
                 let king_quiet_move = king_quiet_moves & king_quiet_moves.wrapping_neg();
                 let dest_sq: Square = FromPrimitive::from_u32(king_quiet_move.trailing_zeros()).unwrap();
                 king_quiet_moves ^= king_quiet_move;
-                moves[num_moves] = Move {
+                moves.push(Move {
                     source_sq,
                     dest_sq,
                     piece: Piece::King,
                     move_type: MoveType::Quiet, 
-                };
-                num_moves += 1;
+                });
             }
             
             // other piece moves to block check
@@ -379,41 +390,37 @@ impl AttackTable {
                                 (piece_move & 0xFF00000000000000 != 0 || piece_move & 0xFF != 0) {
 
                                 for promotion_piece in [Piece::Queen, Piece::Rook, Piece::Bishop, Piece::Knight] {
-                                    moves[num_moves] = Move {
+                                    moves.push(Move {
                                         source_sq,
                                         dest_sq,
                                         piece: piece_type,
                                         move_type: MoveType::MovePromotion(promotion_piece),
-                                    };
-                                    num_moves += 1;
+                                    });
                                 }
                             } else if piece_type == Piece::Pawn &&
                                 (
                                     (one_piece & 0xFF00 != 0 && piece_move & 0xFF000000 != 0) ||
                                     (one_piece & 0xFF000000000000 != 0 && piece_move & 0xFF00000000 != 0)
                                 ) {
-                                // println!("asdf");
-                                moves[num_moves] = Move {
+                                moves.push(Move {
                                     source_sq,
                                     dest_sq,
                                     piece: piece_type,
                                     move_type: MoveType::DoublePawnPush,
-                                };
-                                num_moves += 1;
+                                });
                             } else {
-                                moves[num_moves] = Move {
+                                moves.push(Move {
                                     source_sq,
                                     dest_sq,
                                     piece: piece_type,
                                     move_type: MoveType::Quiet,
-                                };
-                                num_moves += 1;                            
+                                });
                             }
                         }
                     }
                 }
             }
-            return num_moves;
+            return moves.num_moves;
         }
         
         // If reaching this point, the king is not in check
@@ -434,13 +441,12 @@ impl AttackTable {
                 Colour::Black => (Square::E8, Square::G8),
             };
             
-            moves[num_moves] = Move {
+            moves.push(Move {
                 source_sq,
                 dest_sq,
                 piece: Piece::King,
                 move_type: MoveType::CastleKingSide,
-            };
-            num_moves += 1;
+            });
         }
 
         if queenside {
@@ -449,13 +455,12 @@ impl AttackTable {
                 Colour::Black => (Square::E8, Square::C8),
             };
             
-            moves[num_moves] = Move {
+            moves.push(Move {
                 source_sq,
                 dest_sq,
                 piece: Piece::King,
                 move_type: MoveType::CastleQueenSide,
-            };
-            num_moves += 1;
+            });
         }
         
         
@@ -506,13 +511,12 @@ impl AttackTable {
                     // If the pawn is pinned then we don't have to do the awkward legality check with
                     // horizontal discovered check as the pawn can't be pinned to the king horizontally
                     // while also being able to do en-passant
-                    moves[num_moves] = Move {
+                    moves.push(Move {
                         source_sq: FromPrimitive::from_u32(ep_capture.trailing_zeros()).unwrap(),
                         dest_sq: ep_square,
                         piece: Piece::Pawn,
                         move_type: MoveType::EnPassant,
-                    };                        
-                    num_moves += 1;
+                    });                        
                 } else {
                     // now check for illegality if both pawns are pinned
                     if needs_extra_legality_check {
@@ -573,13 +577,12 @@ impl AttackTable {
                     }
 
                     // if reaching this point, all legality checks for en-passant have passed
-                    moves[num_moves] = Move {
+                    moves.push(Move {
                         source_sq: FromPrimitive::from_u32(ep_capture.trailing_zeros()).unwrap(),
                         dest_sq: ep_square,
                         piece: Piece::Pawn,
                         move_type: MoveType::EnPassant,
-                    };                        
-                    num_moves += 1;
+                    });                        
                 }
             }
         }
@@ -619,22 +622,20 @@ impl AttackTable {
                         if piece_type == Piece::Pawn && (one_capture & 0xFF00000000000000 != 0 || one_capture & 0xFF != 0) {
 
                             for promotion_piece in [Piece::Queen, Piece::Rook, Piece::Bishop, Piece::Knight] {
-                                moves[num_moves] = Move {
+                                moves.push(Move {
                                     source_sq,
                                     dest_sq,
                                     piece: Piece::Pawn,
                                     move_type: MoveType::CapturePromotion(captured_piece_type, promotion_piece),
-                                };
-                                num_moves += 1;
+                                });
                             }
                         } else {
-                            moves[num_moves] = Move {
+                            moves.push(Move {
                                 source_sq,
                                 dest_sq,
                                 piece: piece_type,
                                 move_type: MoveType::Capture(captured_piece_type), 
-                            };
-                            num_moves += 1;
+                            });
                         }
                     }
                 }
@@ -673,22 +674,20 @@ impl AttackTable {
 
                         if piece_type == Piece::Pawn && (one_capture & 0xFF00000000000000 != 0 || one_capture & 0xFF != 0) {
                             for promotion_piece in [Piece::Queen, Piece::Rook, Piece::Bishop, Piece::Knight] {
-                                moves[num_moves] = Move {
+                                moves.push(Move {
                                     source_sq: FromPrimitive::from_u32(pinned_piece.trailing_zeros()).unwrap(),
                                     dest_sq: FromPrimitive::from_u32(one_capture.trailing_zeros()).unwrap(),
                                     piece: Piece::Pawn,
                                     move_type: MoveType::CapturePromotion(captured_piece_type, promotion_piece),
-                                };
-                                num_moves += 1;
+                                });
                             }                            
                         } else {
-                            moves[num_moves] = Move {
+                            moves.push(Move {
                                 source_sq: FromPrimitive::from_u32(pinned_piece.trailing_zeros()).unwrap(),
                                 dest_sq: FromPrimitive::from_u32(one_capture.trailing_zeros()).unwrap(),
                                 piece: piece_type,
                                 move_type: MoveType::Capture(captured_piece_type), 
-                            };
-                            num_moves += 1;  
+                            });
                         }
                     }
                 }
@@ -717,13 +716,12 @@ impl AttackTable {
                 let one_capture = all_captures_of_piece & all_captures_of_piece.wrapping_neg();
                 all_captures_of_piece ^= one_capture;
 
-                moves[num_moves] = Move {
+                moves.push(Move {
                     source_sq: FromPrimitive::from_u32(king_position.trailing_zeros()).unwrap(),
                     dest_sq: FromPrimitive::from_u32(one_capture.trailing_zeros()).unwrap(),
                     piece: Piece::King,
                     move_type: MoveType::Capture(captured_piece_type),
-                };
-                num_moves += 1;
+                });
             }
         }
         
@@ -766,36 +764,31 @@ impl AttackTable {
                     
                     if piece_type == Piece::Pawn && (quiet_move & 0xFF != 0 || quiet_move & 0xFF00000000000000 != 0) {
                         for promotion_piece in [Piece::Queen, Piece::Rook, Piece::Bishop, Piece::Knight] {
-                            moves[num_moves] = Move {
+                            moves.push(Move {
                                 source_sq,
                                 dest_sq,
                                 piece: piece_type,
                                 move_type: MoveType::MovePromotion(promotion_piece),
-                            };
-                            num_moves += 1;
+                            });
                         }
                     } else if piece_type == Piece::Pawn && 
                         (
                             (one_piece & 0xFF00 != 0 && quiet_move & 0xFF000000 != 0) ||
                             (one_piece & 0xFF000000000000 != 0 && quiet_move & 0xFF00000000 != 0)
                         ) {
-                        // println!("fuckers {}", num_moves);
-                        moves[num_moves] = Move {
+                        moves.push(Move {
                             source_sq,
                             dest_sq,
                             piece: piece_type,
                             move_type: MoveType::DoublePawnPush,
-                        };
-                        // println!("{:?}", moves[num_moves]);
-                        num_moves += 1;
+                        });
                     } else {
-                        moves[num_moves] = Move {
+                        moves.push(Move {
                             source_sq,
                             dest_sq,
                             piece: piece_type,
                             move_type: MoveType::Quiet,
-                        };
-                        num_moves += 1;
+                        });
                     }
                 }
             }
@@ -818,74 +811,15 @@ impl AttackTable {
             quiet_king_moves ^= king_move;
             let dest_sq = FromPrimitive::from_u32(king_move.trailing_zeros()).unwrap();
 
-            moves[num_moves] = Move {
+            moves.push(Move {
                 source_sq,
                 dest_sq,
                 piece: Piece::King,
                 move_type: MoveType::Quiet,
-            };
-            num_moves +=1;
+            });
         }
-        num_moves
+        moves.num_moves
             
-        /*
-         * simple algorithm:
-         * if king in check from 2 pieces:
-         *      generate king moves
-         *      (danger_squares & king_moves) ^ king_moves
-         *      add remaining moves to list
-         *      return move_list
-         * else if king in check from 1 piece:
-         *      for each piece type:
-         *          generate moves
-         *          AND with checking piece
-         *          if capture available
-         *              add to move list
-         *          AND with blocker squares
-         *              add each to list
-         *          generate king moves as above and add to list
-         *      return move_list
-         * else (king not in check)
-         * 
-         * for each piece type:
-         *      generate moves
-         *      mask out pinned pieces
-         *      add each move to the list
-         * for each pinned piece:
-         *      AND with allowed_ray
-         *      add remaining moves to list
-         * if en_passant available:
-         *      pawn_attacks & en_passant_square
-         *      if pseudo-legal:
-         *          make move
-         *          if in check:
-         *              undo move
-         *          else
-         *              undo move
-         *              add en passant move to list
-         * if castling available:
-         *      
-         * return list
-         */
-        /*
-        if king in check from 2 pieces:
-            generate king moves
-            (danger squares & king moves) ^ king moves
-            for each legal king move:
-                add to move list
-            return move list
-        else if king in check from 1 piece:
-            ...
-        else :
-            for each piece type
-                mask out pinned pieces
-                generate pseudo-legal moves
-                
-            ...
-
-        // check for en_passant capture
-        // check for castling
-         */
     }
     
     // For a given piece type and a bitmask of a single source square, return
