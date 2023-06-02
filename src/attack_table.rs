@@ -47,7 +47,7 @@ pub struct BoardStatus {
     
     // a list of squares each friendly piece can move to to put the king in check,
     // indexed by Piece
-    check_squares: [u64; 6],
+    // check_squares: [u64; 6],
 }
 
 struct MoveList<'a> {
@@ -134,7 +134,7 @@ impl AttackTable {
             occupied: u64) -> u64 {
 
         // should only be 1 bit set
-        assert!(source_sq_mask.is_power_of_two(), 
+        debug_assert!(source_sq_mask.is_power_of_two(), 
                       "piece = {:?}, colour = {:?}, mask = {}, occupied = {}", 
                       piece, colour, source_sq_mask, occupied);
 
@@ -160,7 +160,7 @@ impl AttackTable {
 
         
         // should only be 1 bit set
-        assert!(source_sq_mask.is_power_of_two(), 
+        debug_assert!(source_sq_mask.is_power_of_two(), 
                       "piece = {:?}, colour = {:?}, mask = {}, occupied = {}", 
                       piece, colour, source_sq_mask, occupied);
         
@@ -186,7 +186,7 @@ impl AttackTable {
             occupied: u64) -> u64 {
 
         // should only be 1 bit set
-        assert!(source_sq_mask.is_power_of_two(), 
+        debug_assert!(source_sq_mask.is_power_of_two(), 
                       "piece = {:?}, colour = {:?}, mask = {}, occupied = {}", 
                       piece, colour, source_sq_mask, occupied);
         
@@ -421,7 +421,9 @@ impl AttackTable {
                     board.bitboard.get_colour_mask(!&board.turn_colour),
                 );
                 
-                // TODO, can skip this loop if captures == 0
+                if captures == 0 {
+                    continue;
+                }
                 // in reverse order of piece value
                 for captured_piece_type in [Piece::Queen, Piece::Rook, Piece::Bishop, Piece::Knight, Piece::Pawn] {
                     let mut all_captures_of_piece = captures & board.bitboard.get_colour_piece_mask(
@@ -621,7 +623,7 @@ impl AttackTable {
                 }
                 
                 // for each piece, should only be one way to capture the checking piece
-                assert!(captures_of_checking_piece.is_power_of_two());
+                debug_assert!(captures_of_checking_piece.is_power_of_two());
 
                 let source_sq: Square = FromPrimitive::from_u32(one_piece.trailing_zeros()).unwrap();
                 
@@ -957,10 +959,10 @@ impl AttackTable {
         // needed to get squares friendly pieces can move to to put the enemy king in check
         let enemy_king_square = bitboard.get_colour_piece_mask(Piece::King, enemy_colour);
 
-        assert!(enemy_king_square.is_power_of_two(), "colour = {:?} board = {:?} enemy king = {} {}", 
+        debug_assert!(enemy_king_square.is_power_of_two(), "colour = {:?} board = {:?} enemy king = {} {}", 
             friendly_colour, bitboard, bitmask_to_board(enemy_king_square), enemy_king_square);
 
-        assert!(enemy_king_square.is_power_of_two());
+        debug_assert!(enemy_king_square.is_power_of_two());
 
         // will mark danger squares while calculating pinned pieces 
         let mut danger_squares: u64 = 0;
@@ -975,7 +977,7 @@ impl AttackTable {
         let mut num_checking_pieces: u8 = 0;
         // let mut discovered_check_pseudo_legal_squares: [(Piece, u64, u64); 8] = [(Piece::Pawn, 0, 0); 8];
         // let mut num_discovered_checks: u8 = 0;
-        let mut check_squares: [u64; 6] = [0, 0, 0, 0, 0, 0];
+        // let mut check_squares: [u64; 6] = [0, 0, 0, 0, 0, 0];
         
         for piece in [Piece::Bishop, Piece::Rook, Piece::Queen] {
             let ray_tables = match piece {
@@ -1008,13 +1010,12 @@ impl AttackTable {
             // to put the enemy king in check
             // we put the colour as enemy colour as colour only affects the 
             // lookup of pawn moves
-            // println!("line {}", line!());
-            check_squares[piece as usize] = self.get_single_piece_pseudo_attacks(
-                piece, 
-                enemy_colour, 
-                enemy_king_square, 
-                occupied
-            );
+            // check_squares[piece as usize] = self.get_single_piece_pseudo_attacks(
+            //     piece, 
+            //     enemy_colour, 
+            //     enemy_king_square, 
+            //     occupied
+            // );
                 
             // Start of checks for friendly pieces that are pinned to the friendly king
 
@@ -1022,7 +1023,6 @@ impl AttackTable {
             let mut enemy_piece_mask = bitboard.get_colour_piece_mask(piece, enemy_colour);
             
             // get the full attacks for the piece if it was on the friendly king square
-            // println!("line {}", line!());
             let king_att_squares = self.get_single_piece_pseudo_attacks(
                 piece, 
                 enemy_colour, 
@@ -1036,7 +1036,6 @@ impl AttackTable {
                 let source_square = enemy_piece_mask & enemy_piece_mask.wrapping_neg();
                 
                 // get the full attacks for that piece on the source square
-                // println!("line {}", line!());
                 let enemy_piece_att_squares = self.get_single_piece_pseudo_attacks(
                     piece, 
                     enemy_colour, 
@@ -1085,7 +1084,7 @@ impl AttackTable {
                     // can't pin a piece in one of the other ray directions anyway
                     if pinned != 0 {
                         // check there's only one pinned piece
-                        assert!(pinned.is_power_of_two());
+                        debug_assert!(pinned.is_power_of_two());
                         // The pinned piece can only move along the ray direction from the king to
                         // the pinning piece (including capturing), so just union the two masks and
                         // the source_square of the pinning piece as that hasn't been included in 
@@ -1152,7 +1151,7 @@ impl AttackTable {
                     // can't pin a piece in one of the other ray directions anyway
                     if pinned != 0 {
                         // check that there's only one pinned piece
-                        assert!(pinned.is_power_of_two());
+                        debug_assert!(pinned.is_power_of_two());
 
                         discovered_check_pseudo_legal_squares[num_discovered_checks as usize] = (
                             bitboard.get_piece_type_from_mask(pinned),
@@ -1179,12 +1178,12 @@ impl AttackTable {
             
             // for that piece, also add check squares friendly pieces can move to
             // to put the enemy king in check
-            check_squares[piece as usize] = self.get_single_piece_pseudo_attacks(
-                piece, 
-                enemy_colour, 
-                enemy_king_square, 
-                occupied
-            );
+            // check_squares[piece as usize] = self.get_single_piece_pseudo_attacks(
+            //     piece, 
+            //     enemy_colour, 
+            //     enemy_king_square, 
+            //     occupied
+            // );
 
             while source_squares != 0 {
                 let source_square = source_squares & source_squares.wrapping_neg();
@@ -1199,7 +1198,7 @@ impl AttackTable {
                 
                 // if piece is putting the king in check
                 if attacking_squares & friendly_king_square == friendly_king_square {
-                    assert!(piece != Piece::King);
+                    debug_assert!(piece != Piece::King);
                     // As a non sliding piece can't be blocked it can only be captured
                     king_attacking_pieces[num_checking_pieces as usize] = (piece, source_square, source_square);
                     num_checking_pieces += 1;
@@ -1216,7 +1215,7 @@ impl AttackTable {
             num_checking_pieces,
             // discovered_check_pseudo_legal_squares,
             // num_discovered_checks,
-            check_squares,
+            // check_squares,
         }
     }
 }
@@ -1397,9 +1396,9 @@ mod tests {
             let mut pinned_pieces = $pinned_pieces;
             while pinned_pieces != 0 {
                 let pinned_piece = $pinned_pieces & pinned_pieces.wrapping_neg();
-                //assert!($expected.contains_key(&pinned_piece));
-                assert!($expected.iter().any(|(pinned, _)| *pinned == pinned_piece));
-                assert!($actual.iter().any(|(pinned, _)| *pinned == pinned_piece));
+                //debug_assert!($expected.contains_key(&pinned_piece));
+                debug_assert!($expected.iter().any(|(pinned, _)| *pinned == pinned_piece));
+                debug_assert!($actual.iter().any(|(pinned, _)| *pinned == pinned_piece));
 
                 test_bitboard_eq!(
                     $test_description,
@@ -1460,19 +1459,19 @@ mod tests {
             fen_to_hex("8/8/8/8/8/8/6r1/4rr1r w - - 0 1"), // rook
         ];
         
-        for (i, (expected, actual)) in expected_check_squares.iter()
-                                                             .zip(board_status.check_squares.iter())
-                                                             .enumerate() {
-            let description = format!(
-                "Check squares for {:?} for r1bqkb1r/ppp2ppp/2np1n2/1B2p2Q/8/2N2N2/PPPP1PPP/R1B1R1K1", 
-                Piece::try_from(i).unwrap()
-            );
-            test_bitboard_eq!(
-                description,
-                *expected,
-                *actual,
-            );
-        }
+        // for (i, (expected, actual)) in expected_check_squares.iter()
+        //                                                      .zip(board_status.check_squares.iter())
+        //                                                      .enumerate() {
+        //     let description = format!(
+        //         "Check squares for {:?} for r1bqkb1r/ppp2ppp/2np1n2/1B2p2Q/8/2N2N2/PPPP1PPP/R1B1R1K1", 
+        //         Piece::try_from(i).unwrap()
+        //     );
+        //     test_bitboard_eq!(
+        //         description,
+        //         *expected,
+        //         *actual,
+        //     );
+        // }
 
         
         // -----------------------------------------------------------------------------------------
@@ -1517,19 +1516,19 @@ mod tests {
             fen_to_hex("4RR1R/6R1/8/8/8/8/8/8 w - - 0 1"), // rook
         ];
 
-        for (i, (expected, actual)) in expected_check_squares.iter()
-                                                             .zip(board_status.check_squares.iter())
-                                                             .enumerate() {
-            let description = format!(
-                "Check squares for {:?} for rnb1r1k1/pppp1ppp/5n2/8/1b5q/2N2PP1/PPPPP2P/R1BQKBNR", 
-                Piece::try_from(i).unwrap()
-            );
-            test_bitboard_eq!(
-                description,
-                *expected,
-                *actual,                
-            );
-        }
+        //for (i, (expected, actual)) in expected_check_squares.iter()
+        //                                                     .zip(board_status.check_squares.iter())
+        //                                                     .enumerate() {
+        //    let description = format!(
+        //        "Check squares for {:?} for rnb1r1k1/pppp1ppp/5n2/8/1b5q/2N2PP1/PPPPP2P/R1BQKBNR", 
+        //        Piece::try_from(i).unwrap()
+        //    );
+        //    test_bitboard_eq!(
+        //        description,
+        //        *expected,
+        //        *actual,                
+        //    );
+        //}
         
         // -----------------------------------------------------------------------------------------
         let bitboard = BitBoard::try_from(
@@ -1573,19 +1572,19 @@ mod tests {
             fen_to_hex("1r6/r1rrrrrr/1r6/1r6/1r6/1r6/1r6/1r6 w - - 0 1"), // rook
         ];
         
-        for (i, (expected, actual)) in expected_check_squares.iter()
-                                                             .zip(board_status.check_squares.iter())
-                                                             .enumerate() {
-            let description = format!(
-                "Check squares for {:?} for 8/1K6/8/4k3/8/2r3P1/8/Q3R3",
-                Piece::try_from(i).unwrap()
-            );
-            test_bitboard_eq!(
-                description,
-                *expected,
-                *actual,                
-            );
-        }
+        // for (i, (expected, actual)) in expected_check_squares.iter()
+        //                                                      .zip(board_status.check_squares.iter())
+        //                                                      .enumerate() {
+        //     let description = format!(
+        //         "Check squares for {:?} for 8/1K6/8/4k3/8/2r3P1/8/Q3R3",
+        //         Piece::try_from(i).unwrap()
+        //     );
+        //     test_bitboard_eq!(
+        //         description,
+        //         *expected,
+        //         *actual,                
+        //     );
+        // }
         // -----------------------------------------------------------------------------------------
         let bitboard = BitBoard::try_from(
             "8/4k3/3r4/4p3/4b3/Q5P1/7K/4R3",
@@ -1630,7 +1629,7 @@ mod tests {
         let idx = board_status.king_attacking_pieces.iter().position(|&(piece, source_sq, _)| {
             piece == Piece::Knight && source_sq == 1 << Square::A6 as u32
         });
-        assert!(idx.is_some(), "Knight on A6 expected as king-attacking piece but not found");
+        debug_assert!(idx.is_some(), "Knight on A6 expected as king-attacking piece but not found");
         test_bitboard_eq!(
             "Checking for blocking and/or capturing squares to get out of check for the knight on A6 for 1kb5/pp6/N7/8/8/6Q1/8/1K6",
             fen_to_hex("8/8/N7/8/8/8/8/8 w - - 0 1"),
@@ -1640,7 +1639,7 @@ mod tests {
         let idx = board_status.king_attacking_pieces.iter().position(|&(piece, source_sq, _)| {
             piece == Piece::Queen && source_sq == 1 << Square::G3 as u32
         });
-        assert!(idx.is_some(), "Queen on G3 expected as king-attacking piece but not found");
+        debug_assert!(idx.is_some(), "Queen on G3 expected as king-attacking piece but not found");
         test_bitboard_eq!(
             "Checking for blocking to get out of check for the queen on G3 for 1kb5/pp6/N7/8/8/6Q1/8/1K6",
             fen_to_hex("8/2q5/3q4/4q3/5q2/8/8/8 w - - 0 1"),
@@ -1661,7 +1660,7 @@ mod tests {
             1 << Square::B3 as u32,
             fen_to_hex("PPPPPPPP/PPPPPPPP/P1PPPPPP/P1PPPPPP/P1PPPPPP/P1PPPPPP/P1PPPPPP/P1PPPPPP"),
         );
-        assert!(board_status.discovered_check_pseudo_legal_squares.contains(&expected),
+        debug_assert!(board_status.discovered_check_pseudo_legal_squares.contains(&expected),
                 "8/8/1k6/2N5/8/1B6/5Q2/1R4K1 shows the bishop on B3 as a potential discovered check"
         );
         
@@ -1670,7 +1669,7 @@ mod tests {
             1 << Square::C5 as u32,
             fen_to_hex("PPPPPPPP/PPPPPPPP/P1PPPPPP/PP1PPPPP/PPP1PPPP/PPPP1PPP/PPPPP1PP/PPPPPPPP"),
         );
-        assert!(board_status.discovered_check_pseudo_legal_squares.contains(&expected),
+        debug_assert!(board_status.discovered_check_pseudo_legal_squares.contains(&expected),
                 "8/8/1k6/2N5/8/1B6/5Q2/1R4K1 shows the knight on C5 as a potential discovered check"
         );
         */
