@@ -41,7 +41,7 @@ fn main() {
                 assert!(parts.len() == 2);
                 let depth = parts[1].parse::<u32>();
                 if depth.is_ok() {
-                    let nodes = perft_debug(&mut board, &attack_table, depth.unwrap(), true);
+                    let nodes = perft_debug(&mut board, &attack_table, depth.unwrap(), false);
                     println!("{nodes} nodes");
                 } else {
                     println!("invalid input");
