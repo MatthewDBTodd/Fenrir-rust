@@ -87,201 +87,16 @@ impl AttackTable {
         let mut moves = MoveList::new(moves);
         let board_status = self.get_board_status(&board.bitboard, board.turn_colour,);
         
-        let occupied = board.bitboard.get_entire_mask();
-        
-        let enemy_colour_mask = board.bitboard.get_colour_mask(!&board.turn_colour);
-        
         // first check if king is in double check
         // means we only generate king moves
         if board_status.num_checking_pieces == 2 {
             self.get_king_captures(board, &mut moves, &board_status);
             self.get_king_moves(board, &mut moves, &board_status);
-            
             return moves.num_moves;
-
-        /*
-         * Ways to get out of a single check:
-         * 1. Capture the checking piece with any piece (can include capture-promotions and en-passant)
-         * 2. Block the check with any piece apart from the king (can include promotions)
-         * 3. Move the king to a non danger square (either quiet or capture)
-         */
         } else if board_status.num_checking_pieces == 1 {
-            let (checking_piece, checking_piece_mask, block_squares) = board_status.king_attacking_pieces[0];
-            
-            let checking_piece_sq: Square = FromPrimitive::from_u32(checking_piece_mask.trailing_zeros()).unwrap();
-            
-            // Captures of the checking piece first. Non king pieces can only capture the checking 
-            // piece to stop check
-            for piece_type in [Piece::Pawn, Piece::Knight, Piece::Bishop, Piece::Rook, Piece::Queen] {
-                let mut all_pieces = board.bitboard.get_colour_piece_mask(piece_type, board.turn_colour);
-                
-                // a pinned piece can't do anything about stopping check, remove them
-                all_pieces &= !board_status.pinned_pieces;
-
-                while all_pieces != 0 {
-                    let one_piece = all_pieces & all_pieces.wrapping_neg();
-                    all_pieces ^= one_piece;
-
-                    let captures = self.get_single_piece_captures(
-                        piece_type,
-                        board.turn_colour,
-                        one_piece, 
-                        occupied,
-                        enemy_colour_mask,
-                    );
-                    
-                    let captures_of_checking_piece = captures & checking_piece_mask;
-                    if captures_of_checking_piece == 0 {
-                        continue;
-                    }
-                    
-                    // for each piece, should only be one way to capture the checking piece
-                    assert!(captures_of_checking_piece.is_power_of_two());
-
-                    let source_sq: Square = FromPrimitive::from_u32(one_piece.trailing_zeros()).unwrap();
-                    
-                    // Means we can capture the checking piece via pawn capture-promotion. Hooray!
-                    if piece_type == Piece::Pawn && 
-                        (checking_piece_mask & 0xFF00000000000000 != 0 || checking_piece_mask & 0xFF != 0) {
-
-                        for promotion_piece in [Piece::Queen, Piece::Rook, Piece::Bishop, Piece::Knight] {
-                            moves.push(Move {
-                                source_sq,
-                                dest_sq: checking_piece_sq,
-                                piece: piece_type,
-                                move_type: MoveType::CapturePromotion(checking_piece, promotion_piece), 
-                            });
-                        }
-                    } else {
-                        moves.push(Move {
-                            source_sq,
-                            dest_sq: checking_piece_sq,
-                            piece: piece_type,
-                            move_type: MoveType::Capture(checking_piece)
-                        });
-                    }
-                }
-            }
-
-            // en-passant captures. If EP of the checking pawn is possible, we don't need to check 
-            // for the awkward revealed check when both pawns move from ep, as the king is already
-            // in check from the double pawn pushing pawn
-            if let Some(ep_square) = board.en_passant {
-                let double_push_pawn = match ep_square {
-                    Square::A3 => Square::A4,
-                    Square::B3 => Square::B4,
-                    Square::C3 => Square::C4,
-                    Square::D3 => Square::D4,
-                    Square::E3 => Square::E4,
-                    Square::F3 => Square::F4,
-                    Square::G3 => Square::G4,
-                    Square::H3 => Square::H4,
-                    Square::A6 => Square::A5,
-                    Square::B6 => Square::B5,
-                    Square::C6 => Square::C5,
-                    Square::D6 => Square::D5,
-                    Square::E6 => Square::E5,
-                    Square::F6 => Square::F5,
-                    Square::G6 => Square::G5,
-                    Square::H6 => Square::H5,
-                    _ => panic!("Invalid en passant square"),
-                };
-                let ep_square_mask = 1 << (ep_square as u32);
-                let double_push_pawn_mask = 1 << (double_push_pawn as u32);
-                // means the double pushing pawn is the one checking the king, check if we can ep it
-                if double_push_pawn_mask & checking_piece_mask != 0 {
-                    // as we only want the intersection with pawns we make the last argument just the pawn mask
-                    let mut ep_captures = self.get_single_piece_captures(
-                        Piece::Pawn,
-                        !&board.turn_colour,
-                        ep_square_mask,
-                        occupied,
-                        board.bitboard.get_colour_piece_mask(Piece::Pawn, board.turn_colour),
-                    );
-
-                    while ep_captures != 0 {
-                        let ep_capture = ep_captures & ep_captures.wrapping_neg();
-                        ep_captures ^= ep_capture;
-
-                        if ep_capture & board_status.pinned_pieces == 0 {
-                            moves.push(Move {
-                                source_sq: FromPrimitive::from_u32(ep_capture.trailing_zeros()).unwrap(),
-                                dest_sq: ep_square,
-                                piece: Piece::Pawn,
-                                move_type: MoveType::EnPassant,
-                            });
-                        }
-                    }
-                }
-            }
-            
-            // King captures. The king can get out of check by capturing any available piece
-            self.get_king_captures(board, &mut moves, &board_status);
-            self.get_king_moves(board, &mut moves, &board_status);
-
-            // other piece moves to block check
-            // Only sliding pieces can be blocked
-            if [Piece::Queen, Piece::Rook, Piece::Bishop].contains(&checking_piece) {
-                for piece_type in [Piece::Pawn, Piece::Knight, Piece::Bishop, Piece::Rook, Piece::Queen]  {
-                    let mut all_pieces = board.bitboard.get_colour_piece_mask(piece_type, board.turn_colour);
-                    while all_pieces != 0 {
-                        let one_piece = all_pieces & all_pieces.wrapping_neg();
-                        all_pieces ^= one_piece;
-                        let mut piece_moves = self.get_single_piece_moves(
-                            piece_type,
-                            board.turn_colour,
-                            one_piece,
-                            occupied,
-                        ) & block_squares;
-
-                        while piece_moves != 0 {
-                            let piece_move = piece_moves & piece_moves.wrapping_neg();
-                            piece_moves ^= piece_move;
-
-                            let source_sq: Square = FromPrimitive::from_u32(one_piece.trailing_zeros()).unwrap();
-                            let dest_sq: Square = FromPrimitive::from_u32(piece_move.trailing_zeros()).unwrap();
-                            
-                            // Can block with a move promotion. Hooray!
-                            if piece_type == Piece::Pawn &&
-                                (piece_move & 0xFF00000000000000 != 0 || piece_move & 0xFF != 0) {
-
-                                for promotion_piece in [Piece::Queen, Piece::Rook, Piece::Bishop, Piece::Knight] {
-                                    moves.push(Move {
-                                        source_sq,
-                                        dest_sq,
-                                        piece: piece_type,
-                                        move_type: MoveType::MovePromotion(promotion_piece),
-                                    });
-                                }
-                            } else if piece_type == Piece::Pawn &&
-                                (
-                                    (one_piece & 0xFF00 != 0 && piece_move & 0xFF000000 != 0) ||
-                                    (one_piece & 0xFF000000000000 != 0 && piece_move & 0xFF00000000 != 0)
-                                ) {
-                                moves.push(Move {
-                                    source_sq,
-                                    dest_sq,
-                                    piece: piece_type,
-                                    move_type: MoveType::DoublePawnPush,
-                                });
-                            } else {
-                                moves.push(Move {
-                                    source_sq,
-                                    dest_sq,
-                                    piece: piece_type,
-                                    move_type: MoveType::Quiet,
-                                });
-                            }
-                        }
-                    }
-                }
-            }
+            self.get_out_of_single_check(board, &mut moves, &board_status);
             return moves.num_moves;
         }
-        
-        // If reaching this point, the king is not in check
-        
-        // Insert castling here
         // We already know if reaching this point the king is not in check
         // then for kingside/queenside, if it's still enabled, then check if the
         // squares between the king and rook are empty, and that the intermediate squares are not
@@ -289,35 +104,7 @@ impl AttackTable {
         // if castling is still enabled for a side, then we already know the rook and king are still
         // on their origin squares, as board.make_move() disables castling if the king is ever moved
         // and if the rooks ever move/are captured
-        let (kingside, queenside) = self.get_legal_castling_rights(board, &board_status);
-        
-        if kingside {
-            let (source_sq, dest_sq) = match board.turn_colour {
-                Colour::White => (Square::E1, Square::G1),
-                Colour::Black => (Square::E8, Square::G8),
-            };
-            
-            moves.push(Move {
-                source_sq,
-                dest_sq,
-                piece: Piece::King,
-                move_type: MoveType::CastleKingSide,
-            });
-        }
-
-        if queenside {
-            let (source_sq, dest_sq) = match board.turn_colour {
-                Colour::White => (Square::E1, Square::C1),
-                Colour::Black => (Square::E8, Square::C8),
-            };
-            
-            moves.push(Move {
-                source_sq,
-                dest_sq,
-                piece: Piece::King,
-                move_type: MoveType::CastleQueenSide,
-            });
-        }
+        self.get_legal_castling_rights(board, &mut moves, &board_status);
         
         if let Some(ep_square) = board.en_passant {
             self.get_en_passant_moves(ep_square, board, &mut moves, &board_status);
@@ -794,57 +581,190 @@ impl AttackTable {
             }
         }
     }
-    
-    fn get_single_piece_pseudo_moves(
-            &self,
-            piece: Piece,
-            colour: Colour,
-            source_sq_mask: u64,
-            occupied: u64) -> u64 {
 
-        // should only be 1 bit set
-        assert!(source_sq_mask.is_power_of_two(), 
-                      "piece = {:?}, colour = {:?}, mask = {}, occupied = {}", 
-                      piece, colour, source_sq_mask, occupied);
+    /*
+    * Ways to get out of a single check:
+    * 1. Capture the checking piece with any piece (can include capture-promotions and en-passant)
+    * 2. Block the check with any piece apart from the king (can include promotions)
+    * 3. Move the king to a non danger square (either quiet or capture)
+    */
+    fn get_out_of_single_check(&self, board: &Board, moves: &mut MoveList, board_status: &BoardStatus) {
+        let occupied = board.bitboard.get_entire_mask();
+        let enemy_colour_mask = board.bitboard.get_colour_mask(!&board.turn_colour);
+        let (checking_piece, checking_piece_mask, block_squares) = board_status.king_attacking_pieces[0];
         
-        match piece {
-            Piece::Pawn => {
-                let idx = source_sq_mask.trailing_zeros() as usize;
-                self.pawn_moves[colour as usize][idx] ^ occupied
-            },
-            _ => self.get_single_piece_pseudo_attacks(piece, colour, source_sq_mask, occupied),
+        let checking_piece_sq: Square = FromPrimitive::from_u32(checking_piece_mask.trailing_zeros()).unwrap();
+        
+        // Captures of the checking piece first. Non king pieces can only capture the checking 
+        // piece to stop check
+        for piece_type in [Piece::Pawn, Piece::Knight, Piece::Bishop, Piece::Rook, Piece::Queen] {
+            let mut all_pieces = board.bitboard.get_colour_piece_mask(piece_type, board.turn_colour);
+            
+            // a pinned piece can't do anything about stopping check, remove them
+            all_pieces &= !board_status.pinned_pieces;
+
+            while all_pieces != 0 {
+                let one_piece = all_pieces & all_pieces.wrapping_neg();
+                all_pieces ^= one_piece;
+
+                let captures = self.get_single_piece_captures(
+                    piece_type,
+                    board.turn_colour,
+                    one_piece, 
+                    occupied,
+                    enemy_colour_mask,
+                );
+                
+                let captures_of_checking_piece = captures & checking_piece_mask;
+                if captures_of_checking_piece == 0 {
+                    continue;
+                }
+                
+                // for each piece, should only be one way to capture the checking piece
+                assert!(captures_of_checking_piece.is_power_of_two());
+
+                let source_sq: Square = FromPrimitive::from_u32(one_piece.trailing_zeros()).unwrap();
+                
+                // Means we can capture the checking piece via pawn capture-promotion. Hooray!
+                if piece_type == Piece::Pawn && 
+                    (checking_piece_mask & 0xFF00000000000000 != 0 || checking_piece_mask & 0xFF != 0) {
+
+                    for promotion_piece in [Piece::Queen, Piece::Rook, Piece::Bishop, Piece::Knight] {
+                        moves.push(Move {
+                            source_sq,
+                            dest_sq: checking_piece_sq,
+                            piece: piece_type,
+                            move_type: MoveType::CapturePromotion(checking_piece, promotion_piece), 
+                        });
+                    }
+                } else {
+                    moves.push(Move {
+                        source_sq,
+                        dest_sq: checking_piece_sq,
+                        piece: piece_type,
+                        move_type: MoveType::Capture(checking_piece)
+                    });
+                }
+            }
         }
+
+        // en-passant captures. If EP of the checking pawn is possible, we don't need to check 
+        // for the awkward revealed check when both pawns move from ep, as the king is already
+        // in check from the double pawn pushing pawn
+        if let Some(ep_square) = board.en_passant {
+            let double_push_pawn = match ep_square {
+                Square::A3 => Square::A4,
+                Square::B3 => Square::B4,
+                Square::C3 => Square::C4,
+                Square::D3 => Square::D4,
+                Square::E3 => Square::E4,
+                Square::F3 => Square::F4,
+                Square::G3 => Square::G4,
+                Square::H3 => Square::H4,
+                Square::A6 => Square::A5,
+                Square::B6 => Square::B5,
+                Square::C6 => Square::C5,
+                Square::D6 => Square::D5,
+                Square::E6 => Square::E5,
+                Square::F6 => Square::F5,
+                Square::G6 => Square::G5,
+                Square::H6 => Square::H5,
+                _ => panic!("Invalid en passant square"),
+            };
+            let ep_square_mask = 1 << (ep_square as u32);
+            let double_push_pawn_mask = 1 << (double_push_pawn as u32);
+            // means the double pushing pawn is the one checking the king, check if we can ep it
+            if double_push_pawn_mask & checking_piece_mask != 0 {
+                // as we only want the intersection with pawns we make the last argument just the pawn mask
+                let mut ep_captures = self.get_single_piece_captures(
+                    Piece::Pawn,
+                    !&board.turn_colour,
+                    ep_square_mask,
+                    occupied,
+                    board.bitboard.get_colour_piece_mask(Piece::Pawn, board.turn_colour),
+                );
+
+                while ep_captures != 0 {
+                    let ep_capture = ep_captures & ep_captures.wrapping_neg();
+                    ep_captures ^= ep_capture;
+
+                    if ep_capture & board_status.pinned_pieces == 0 {
+                        moves.push(Move {
+                            source_sq: FromPrimitive::from_u32(ep_capture.trailing_zeros()).unwrap(),
+                            dest_sq: ep_square,
+                            piece: Piece::Pawn,
+                            move_type: MoveType::EnPassant,
+                        });
+                    }
+                }
+            }
+        }
+        
+        // King captures. The king can get out of check by capturing any available piece
+        self.get_king_captures(board, moves, &board_status);
+        self.get_king_moves(board, moves, &board_status);
+
+        // other piece moves to block check
+        // Only sliding pieces can be blocked
+        if [Piece::Queen, Piece::Rook, Piece::Bishop].contains(&checking_piece) {
+            for piece_type in [Piece::Pawn, Piece::Knight, Piece::Bishop, Piece::Rook, Piece::Queen]  {
+                let mut all_pieces = board.bitboard.get_colour_piece_mask(piece_type, board.turn_colour);
+                while all_pieces != 0 {
+                    let one_piece = all_pieces & all_pieces.wrapping_neg();
+                    all_pieces ^= one_piece;
+                    let mut piece_moves = self.get_single_piece_moves(
+                        piece_type,
+                        board.turn_colour,
+                        one_piece,
+                        occupied,
+                    ) & block_squares;
+
+                    while piece_moves != 0 {
+                        let piece_move = piece_moves & piece_moves.wrapping_neg();
+                        piece_moves ^= piece_move;
+
+                        let source_sq: Square = FromPrimitive::from_u32(one_piece.trailing_zeros()).unwrap();
+                        let dest_sq: Square = FromPrimitive::from_u32(piece_move.trailing_zeros()).unwrap();
+                        
+                        // Can block with a move promotion. Hooray!
+                        if piece_type == Piece::Pawn &&
+                            (piece_move & 0xFF00000000000000 != 0 || piece_move & 0xFF != 0) {
+
+                            for promotion_piece in [Piece::Queen, Piece::Rook, Piece::Bishop, Piece::Knight] {
+                                moves.push(Move {
+                                    source_sq,
+                                    dest_sq,
+                                    piece: piece_type,
+                                    move_type: MoveType::MovePromotion(promotion_piece),
+                                });
+                            }
+                        } else if piece_type == Piece::Pawn &&
+                            (
+                                (one_piece & 0xFF00 != 0 && piece_move & 0xFF000000 != 0) ||
+                                (one_piece & 0xFF000000000000 != 0 && piece_move & 0xFF00000000 != 0)
+                            ) {
+                            moves.push(Move {
+                                source_sq,
+                                dest_sq,
+                                piece: piece_type,
+                                move_type: MoveType::DoublePawnPush,
+                            });
+                        } else {
+                            moves.push(Move {
+                                source_sq,
+                                dest_sq,
+                                piece: piece_type,
+                                move_type: MoveType::Quiet,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
     }
     
-    // For a given piece type and a bitmask of all its source squares, return
-    // a bitmask of all the squares those pieces attack
-    fn get_all_piece_attacks(
-            &self, 
-            piece: Piece, 
-            colour: Colour, 
-            piece_mask: u64, 
-            occupied: u64) -> u64 {
-
-        let mut piece_mask = piece_mask;
-        let mut rv: u64 = 0;
-        while piece_mask != 0 {
-            // single out the least significant bit
-            let source_sq_mask = piece_mask & piece_mask.wrapping_neg();
-            
-            rv |= self.get_single_piece_pseudo_attacks(
-                piece, 
-                colour, 
-                source_sq_mask, 
-                occupied
-            );
-            // remove the least significant bit for the next iteration
-            piece_mask ^= source_sq_mask;
-        } 
-        rv
-    }
-
-    // (kingside, queenside)
-    fn get_legal_castling_rights(&self, board: &Board, board_status: &BoardStatus) -> (bool, bool) {
+    fn get_legal_castling_rights(&self, board: &Board, moves: &mut MoveList, board_status: &BoardStatus) {
         let (mut kingside, mut queenside) = board.castling_rights.can_castle(board.turn_colour);
         
         // For castling we have to check that:
@@ -872,8 +792,34 @@ impl AttackTable {
             queenside = in_between_squares & board.bitboard.get_entire_mask() == 0
                      && king_travel_squares & board_status.danger_squares == 0;
         }
-        
-        (kingside, queenside)
+
+        if kingside {
+            let (source_sq, dest_sq) = match board.turn_colour {
+                Colour::White => (Square::E1, Square::G1),
+                Colour::Black => (Square::E8, Square::G8),
+            };
+            
+            moves.push(Move {
+                source_sq,
+                dest_sq,
+                piece: Piece::King,
+                move_type: MoveType::CastleKingSide,
+            });
+        }
+
+        if queenside {
+            let (source_sq, dest_sq) = match board.turn_colour {
+                Colour::White => (Square::E1, Square::C1),
+                Colour::Black => (Square::E8, Square::C8),
+            };
+            
+            moves.push(Move {
+                source_sq,
+                dest_sq,
+                piece: Piece::King,
+                move_type: MoveType::CastleQueenSide,
+            });
+        }
     }
     
     /*
