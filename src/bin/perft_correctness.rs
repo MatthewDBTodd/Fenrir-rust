@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use clap::{Command, Arg, ArgAction};
 use chess::{shared_perft::*};
 use chess::board::Board;
@@ -34,11 +36,11 @@ fn main() {
                 .required(false)
         )
         .arg(
-            Arg::new("interactive")
-                .short('i')
-                .long("interactive")
+            Arg::new("print_timings")
+                .short('t')
+                .long("print-timings")
                 .action(ArgAction::SetTrue)
-                .value_name("INTERACTIVE")
+                .value_name("PRINT_TIMINGS")
                 .required(false)
         )
         .arg(
@@ -53,6 +55,7 @@ fn main() {
         let depth = cli.get_one::<u32>("depth").copied().unwrap();
         let fen = cli.get_one::<String>("fen").unwrap();
         let verbose = cli.get_flag("verbose");
+        let print_timings = cli.get_flag("print_timings");
         let moves: Vec<String> = cli.get_many("moves")
             .unwrap_or_default()
             .cloned()
@@ -79,7 +82,12 @@ fn main() {
         if verbose {
             println!("{}", board);
         }
+        let start = Instant::now();
         let nodes = perft_debug(&mut board, &attack_table, depth, verbose);
-        println!("\n{nodes}")
+        let duration = start.elapsed().as_secs_f64();
+        let nodes_per_sec = (nodes as f64 / duration).round() as u64;
+        println!("\n{nodes}");
+        println!("\nFinished in {duration}s at {nodes_per_sec} nodes per second");
+
 
 }
