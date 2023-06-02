@@ -1,2 +1,6 @@
 /target
 /stuff
+.vscode
+*.svg
+*.data
+*.old
