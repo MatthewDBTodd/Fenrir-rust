@@ -17,6 +17,9 @@ pub struct AttackTable {
     rook_attacks: Vec<Magic>,
 }
 
+// TODO:
+// Save some of this in the boards move cache? So don't have to calculate board status again
+// when undoing moves
 pub struct BoardStatus {
     // danger squares are attacked squares but also including rays behind the king
     // as they're used to show squares that would leave the king in check
@@ -82,6 +85,9 @@ impl AttackTable {
         }
     }
     
+    // TODO:
+    // generate captures and moves in the same loop, but maintain an index pointer within the move-list
+    // so you can still keep captures sorted before moves
     pub fn generate_legal_moves(&self, board: &Board, moves: &mut [Move; 256]) -> usize {
 
         let mut moves = MoveList::new(moves);
@@ -937,8 +943,6 @@ impl AttackTable {
      */
 
     pub fn get_board_status(&self, bitboard: &BitBoard, friendly_colour: Colour) -> BoardStatus {
-        // println!("{:?}", bitboard);
-        // println!("line {}", line!());
         // first get the king bitboard for the colour to move
         let friendly_king_square = bitboard.get_colour_piece_mask(Piece::King, friendly_colour);
         let friendly_king_idx = friendly_king_square.trailing_zeros() as usize;
@@ -979,196 +983,315 @@ impl AttackTable {
         // let mut num_discovered_checks: u8 = 0;
         // let mut check_squares: [u64; 6] = [0, 0, 0, 0, 0, 0];
         
-        for piece in [Piece::Bishop, Piece::Rook, Piece::Queen] {
-            let ray_tables = match piece {
-                Piece::Bishop => vec![
-                    (&NORTH_EAST, &SOUTH_WEST),
-                    (&NORTH_WEST, &SOUTH_EAST),
-                    (&SOUTH_EAST, &NORTH_WEST),
-                    (&SOUTH_WEST, &NORTH_EAST),
-                ],
-                Piece::Rook => vec![
-                    (&NORTH, &SOUTH),
-                    (&SOUTH, &NORTH),
-                    (&EAST, &WEST),
-                    (&WEST, &EAST),
-                ],
-                Piece::Queen => vec![
-                    (&NORTH, &SOUTH),
-                    (&SOUTH, &NORTH),
-                    (&EAST, &WEST),
-                    (&WEST, &EAST),
-                    (&NORTH_EAST, &SOUTH_WEST),
-                    (&NORTH_WEST, &SOUTH_EAST),
-                    (&SOUTH_EAST, &NORTH_WEST),
-                    (&SOUTH_WEST, &NORTH_EAST),
-                ],
-                _ => panic!("This should not happen"),
-            };
-            
-            // for that piece, also add check squares friendly pieces can move to
-            // to put the enemy king in check
-            // we put the colour as enemy colour as colour only affects the 
-            // lookup of pawn moves
-            // check_squares[piece as usize] = self.get_single_piece_pseudo_attacks(
-            //     piece, 
-            //     enemy_colour, 
-            //     enemy_king_square, 
-            //     occupied
-            // );
-                
-            // Start of checks for friendly pieces that are pinned to the friendly king
+        // TODO:
+        // Don't need separate ray directions and can probs do it in one go with all pieces together
+        let friendly_pieces = bitboard.get_colour_mask(friendly_colour);
+        let king_blockers_rook = self.get_single_piece_pseudo_attacks(
+            Piece::Rook, 
+            friendly_colour, 
+            friendly_king_square,
+            occupied,
+        );
+        let king_blockers_bishop = self.get_single_piece_pseudo_attacks(
+            Piece::Bishop,
+            friendly_colour,
+            friendly_king_square,
+            occupied,
+        );
+        let king_blockers_queen = king_blockers_rook | king_blockers_bishop;
+        let king_blockers = king_blockers_queen & friendly_pieces;
+        // println!("{}", bitmask_to_board(king_blockers));
 
-            // get bitmasks of all pieces of that type
-            let mut enemy_piece_mask = bitboard.get_colour_piece_mask(piece, enemy_colour);
-            
-            // get the full attacks for the piece if it was on the friendly king square
-            let king_att_squares = self.get_single_piece_pseudo_attacks(
-                piece, 
-                enemy_colour, 
-                friendly_king_square, 
-                kingless_mask
-            );
-            
-            // iterate through those pieces one by one
+        let queen_pieces = bitboard.get_colour_piece_mask(Piece::Queen, enemy_colour);
+
+        for piece in [Piece::Bishop, Piece::Rook] {
+            let mut enemy_piece_mask = bitboard.get_colour_piece_mask(piece, enemy_colour)
+                | queen_pieces;
             while enemy_piece_mask != 0 {
-                // single out the least significant bit
-                let source_square = enemy_piece_mask & enemy_piece_mask.wrapping_neg();
-                
-                // get the full attacks for that piece on the source square
-                let enemy_piece_att_squares = self.get_single_piece_pseudo_attacks(
-                    piece, 
-                    enemy_colour, 
-                    source_square, 
-                    kingless_mask
+                let enemy_piece = enemy_piece_mask & enemy_piece_mask.wrapping_neg();
+                enemy_piece_mask ^= enemy_piece;
+
+                let piece_attacks = self.get_single_piece_pseudo_attacks(
+                    piece, enemy_colour, enemy_piece, kingless_mask,
                 );
-                
-                // add to danger squares
-                danger_squares |= enemy_piece_att_squares;
-                
-                let piece_idx = source_square.trailing_zeros() as usize;
+                danger_squares |= piece_attacks;
 
-                // loop through each ray direction separately
-                for ray_direction in ray_tables.iter() {
-                    // get the ray mask for that direction
-                    let ray_mask = ray_direction.0[piece_idx];
-                    let piece_ray_mask = ray_mask & enemy_piece_att_squares;
-                    
-                    // now get the mask for the opposite direction with the piece if placed on 
-                    // the king square
-                    let ray_mask = ray_direction.1[friendly_king_idx];
-                    let king_ray_mask = ray_mask & king_att_squares;
-                    
-                    // check if king is in check via the king ray mask
-                    // third element is just the block squares
-                    if king_ray_mask & source_square == source_square {
-                        king_attacking_pieces[num_checking_pieces as usize] = (piece, source_square, king_ray_mask ^ source_square);
-                        num_checking_pieces += 1;
-                    }
-                    
-                    // intersection of the two 
-                    // If there's no pieces in between the sliding piece and the king, 
-                    // i.e. the king is in check, this algorithm will incorrectly mark all the 
-                    // intermediate squares between the two as pinned, as the two opposite rays
-                    // overlap in all the intermediate squares. e.g. on the board
-                    // "8/8/8/4k3/8/2r3P1/8/Q3R3 w - - 0 1" it incorrectly marks E2, E3 and E4 as
-                    // "pinned". The intersection with the colour mask removes that.
-                    let pinned = piece_ray_mask & king_ray_mask & bitboard.get_colour_mask(friendly_colour);
-                    
-                    pinned_pieces |= pinned;
-
-                    // means we have found a pinned piece for that piece, can skip the remaining
-                    // ray directions as a piece can't pin a piece in multiple ray directions
-                    // Technically this could incorrectly break early due to the comment above,
-                    // but as that can only happen when the piece can have the king in check it 
-                    // can't pin a piece in one of the other ray directions anyway
-                    if pinned != 0 {
-                        // check there's only one pinned piece
-                        debug_assert!(pinned.is_power_of_two());
-                        // The pinned piece can only move along the ray direction from the king to
-                        // the pinning piece (including capturing), so just union the two masks and
-                        // the source_square of the pinning piece as that hasn't been included in 
-                        // its attack mask
-                        pinned_legal_squares[num_pinned] = (pinned, piece_ray_mask | king_ray_mask | source_square);
-                        num_pinned += 1;
-                        break;
-                    }
+                // has king in check
+                if piece_attacks & friendly_king_square != 0 {
+                    let piece = if enemy_piece & queen_pieces != 0 {
+                        Piece::Queen
+                    } else {
+                        piece
+                    };
+                    let king_attacks = match piece {
+                        Piece::Bishop => king_blockers_bishop,
+                        Piece::Rook => king_blockers_rook,
+                        Piece::Queen => king_blockers_queen,
+                        _ => panic!("This should not happen"),
+                    };
+                    king_attacking_pieces[num_checking_pieces as usize] = (
+                        piece, enemy_piece, king_attacks & piece_attacks,
+                    );
+                    num_checking_pieces += 1;
+                    continue;
                 }
-                // remove least significant bit from piece mask for next iteration
-                enemy_piece_mask ^= source_square;
-            }
-/* -------------------------------------------------------------------------------------------------
- * This section calculates potential discovered checks for the friendly colour
- * However, it's made things rather complicated in generating move order, for now I'm more concerned
- * with correctness of move gen rather than optimising move order, will keep this commented out 
- * for now and revisit once I'm confident move generation is correct.
- * 
-            // start of checks for friendly pieces pinned to the enemy king 
-            // i.e. those that can cause a discovered check
-            
-            // get bitmasks of all pieces of that type
-            let mut friendly_piece_mask = bitboard.get_colour_piece_mask(piece, friendly_colour);
-            
-            // get the full attacks for the piece if it was on the enemy king square
-            let king_att_squares = self.get_single_piece_pseudo_attacks(
-                piece, 
-                friendly_colour, 
-                enemy_king_square, 
-                occupied 
-            );
-            
-            // iterate through those pieces one by one
-            while friendly_piece_mask != 0 {
-                let source_square = friendly_piece_mask & friendly_piece_mask.wrapping_neg();
-                
-                // get the full attacks for that piece on the source square
-                let friendly_piece_att_squares = self.get_single_piece_pseudo_attacks(
-                    piece, 
-                    friendly_colour, 
-                    source_square, 
-                    occupied 
-                );
-                
-                let piece_idx = source_square.trailing_zeros() as usize;
-                
-                // loop through each ray direction separately
-                for ray_direction in ray_tables.iter() {
-                    // get the ray mask for that direction
-                    let ray_mask = ray_direction.0[piece_idx];
-                    let piece_ray_mask = ray_mask & friendly_piece_att_squares;
-                    
-                    // now get the mask for the opposite direction with the piece if placed on 
-                    // the king square
-                    let ray_mask = ray_direction.1[enemy_king_idx];
-                    let king_ray_mask = ray_mask & king_att_squares;
-                    
-                    let pinned = piece_ray_mask & king_ray_mask & bitboard.get_colour_mask(friendly_colour);
-                    
-                    // means we have found a pinned piece for that piece, can skip the remaining
-                    // ray directions as a piece can't pin a piece in multiple ray directions
-                    // Technically this could incorrectly break early due to the comment above,
-                    // but as that can only happen when the piece can have the king in check it 
-                    // can't pin a piece in one of the other ray directions anyway
-                    if pinned != 0 {
-                        // check that there's only one pinned piece
-                        debug_assert!(pinned.is_power_of_two());
+                let blockers = match piece {
+                    Piece::Bishop => king_blockers_bishop,
+                    Piece::Rook => king_blockers_rook,
+                    Piece::Queen => {
+                        println!("lel");
+                        king_blockers_queen
+                    },
+                    _ => panic!("shit"),
+                };
 
-                        discovered_check_pseudo_legal_squares[num_discovered_checks as usize] = (
-                            bitboard.get_piece_type_from_mask(pinned),
-                            pinned,
-                            // the piece can move to any square that's not in the ray blocking the
-                            // enemy king to initiate discovered check, i.e. the rest of the board
-                            !(piece_ray_mask | king_ray_mask | source_square | enemy_king_square)
-                        );
-                        num_discovered_checks += 1;
-                        break;
+                let arr = if piece == Piece::Rook {
+                    &ROOK
+                } else {
+                    &BISHOP
+                };
+                let pinned = if arr[enemy_piece.trailing_zeros() as usize] & friendly_king_square != 0 {
+                    piece_attacks & blockers
+                } else {
+                    0u64
+                };
+                pinned_pieces |= pinned;
+                if pinned != 0 {
+                    // println!("{}", bitmask_to_board(pinned));
+                    // check there's only one pinned piece
+                    // debug_assert!(pinned.is_power_of_two());
+                    if !pinned.is_power_of_two() {
+                        println!("pinned = {}", bitmask_to_board(pinned));
+                        println!("{bitboard}");
+                        println!("{:?}", friendly_colour);
+                        panic!("fuck");
                     }
+                    // The pinned piece can only move along the ray direction from the king to
+                    // the pinning piece (including capturing), so just union the two masks and
+                    // the source_square of the pinning piece as that hasn't been included in 
+                    // its attack mask
+                    let occupied_tmp = occupied & !pinned;
+                    let legal_squares = self.get_single_piece_pseudo_attacks(
+                        piece,
+                        friendly_colour,
+                        friendly_king_square,
+                        occupied_tmp,
+                    ) & self.get_single_piece_pseudo_attacks(
+                        piece,
+                        friendly_colour,
+                        enemy_piece,
+                        occupied_tmp,
+                    ) | enemy_piece;
+                    pinned_legal_squares[num_pinned] = (pinned, legal_squares);
+                    num_pinned += 1;
+                    break;
                 }
-                // remove least significant bit from piece mask for next iteration
-                friendly_piece_mask ^= source_square;
             }
-*-------------------------------------------------------------------------------------------------*/
         }
+        // println!("pinned pieces = {}", bitmask_to_board(pinned_pieces));
+        // for (pinned, legal_squares) in pinned_legal_squares.iter() {
+        //     println!("legal_squares = {}", bitmask_to_board(*legal_squares));
+        // }
+
+
+        // for piece in [Piece::Bishop, Piece::Rook, Piece::Queen] {
+        //     // let ray_tables = match piece {
+        //     //     Piece::Bishop => vec![
+        //     //         (&NORTH_EAST, &SOUTH_WEST),
+        //     //         (&NORTH_WEST, &SOUTH_EAST),
+        //     //         (&SOUTH_EAST, &NORTH_WEST),
+        //     //         (&SOUTH_WEST, &NORTH_EAST),
+        //     //     ],
+        //     //     Piece::Rook => vec![
+        //     //         (&NORTH, &SOUTH),
+        //     //         (&SOUTH, &NORTH),
+        //     //         (&EAST, &WEST),
+        //     //         (&WEST, &EAST),
+        //     //     ],
+        //     //     Piece::Queen => vec![
+        //     //         (&NORTH, &SOUTH),
+        //     //         (&SOUTH, &NORTH),
+        //     //         (&EAST, &WEST),
+        //     //         (&WEST, &EAST),
+        //     //         (&NORTH_EAST, &SOUTH_WEST),
+        //     //         (&NORTH_WEST, &SOUTH_EAST),
+        //     //         (&SOUTH_EAST, &NORTH_WEST),
+        //     //         (&SOUTH_WEST, &NORTH_EAST),
+        //     //     ],
+        //     //     _ => panic!("This should not happen"),
+        //     // };
+        //     
+        //     // for that piece, also add check squares friendly pieces can move to
+        //     // to put the enemy king in check
+        //     // we put the colour as enemy colour as colour only affects the 
+        //     // lookup of pawn moves
+        //     // check_squares[piece as usize] = self.get_single_piece_pseudo_attacks(
+        //     //     piece, 
+        //     //     enemy_colour, 
+        //     //     enemy_king_square, 
+        //     //     occupied
+        //     // );
+        //         
+        //     // Start of checks for friendly pieces that are pinned to the friendly king
+
+        //     // get bitmasks of all pieces of that type
+        //     let mut enemy_piece_mask = bitboard.get_colour_piece_mask(piece, enemy_colour);
+        //     
+        //     // get the full attacks for the piece if it was on the friendly king square
+        //     let king_att_squares = self.get_single_piece_pseudo_attacks(
+        //         piece, 
+        //         enemy_colour, 
+        //         friendly_king_square, 
+        //         kingless_mask
+        //     );
+        //     
+        //     // iterate through those pieces one by one
+        //     while enemy_piece_mask != 0 {
+        //         // single out the least significant bit
+        //         let source_square = enemy_piece_mask & enemy_piece_mask.wrapping_neg();
+        //         enemy_piece_mask ^= source_square;
+        //         
+        //         // get the full attacks for that piece on the source square
+        //         let enemy_piece_att_squares = self.get_single_piece_pseudo_attacks(
+        //             piece, 
+        //             enemy_colour, 
+        //             source_square, 
+        //             kingless_mask
+        //         );
+
+        //         // add to danger squares
+        //         danger_squares |= enemy_piece_att_squares;
+
+        //         let pinned = king_att_squares & enemy_piece_att_squares & bitboard.get_colour_mask(friendly_colour);
+
+        //         pinned_pieces |= pinned;
+
+        //         if pinned != 0 {
+        //             debug_assert!(pinned.is_power_of_two());
+        //             // pinned_legal_squares[num_pinned] = (pinned, piece_)
+        //         }
+        //         
+        //         // let piece_idx = source_square.trailing_zeros() as usize;
+
+        //         // loop through each ray direction separately
+        //         for ray_direction in ray_tables.iter() {
+        //             // get the ray mask for that direction
+        //             let ray_mask = ray_direction.0[piece_idx];
+        //             let piece_ray_mask = ray_mask & enemy_piece_att_squares;
+        //             
+        //             // now get the mask for the opposite direction with the piece if placed on 
+        //             // the king square
+        //             let ray_mask = ray_direction.1[friendly_king_idx];
+        //             let king_ray_mask = ray_mask & king_att_squares;
+        //             
+        //             // check if king is in check via the king ray mask
+        //             // third element is just the block squares
+        //             if king_ray_mask & source_square == source_square {
+        //                 king_attacking_pieces[num_checking_pieces as usize] = (piece, source_square, king_ray_mask ^ source_square);
+        //                 num_checking_pieces += 1;
+        //             }
+        //             
+        //             // intersection of the two 
+        //             // If there's no pieces in between the sliding piece and the king, 
+        //             // i.e. the king is in check, this algorithm will incorrectly mark all the 
+        //             // intermediate squares between the two as pinned, as the two opposite rays
+        //             // overlap in all the intermediate squares. e.g. on the board
+        //             // "8/8/8/4k3/8/2r3P1/8/Q3R3 w - - 0 1" it incorrectly marks E2, E3 and E4 as
+        //             // "pinned". The intersection with the colour mask removes that.
+        //             let pinned = piece_ray_mask & king_ray_mask & bitboard.get_colour_mask(friendly_colour);
+        //             
+        //             pinned_pieces |= pinned;
+
+        //             // means we have found a pinned piece for that piece, can skip the remaining
+        //             // ray directions as a piece can't pin a piece in multiple ray directions
+        //             // Technically this could incorrectly break early due to the comment above,
+        //             // but as that can only happen when the piece can have the king in check it 
+        //             // can't pin a piece in one of the other ray directions anyway
+        //             if pinned != 0 {
+        //                 // check there's only one pinned piece
+        //                 debug_assert!(pinned.is_power_of_two());
+        //                 // The pinned piece can only move along the ray direction from the king to
+        //                 // the pinning piece (including capturing), so just union the two masks and
+        //                 // the source_square of the pinning piece as that hasn't been included in 
+        //                 // its attack mask
+        //                 pinned_legal_squares[num_pinned] = (pinned, piece_ray_mask | king_ray_mask | source_square);
+        //                 num_pinned += 1;
+        //                 break;
+        //             }
+        //         }
+        //     }
+/* -----// --------------------------------------------------------------------------------------------
+ * This // section calculates potential discovered checks for the friendly colour
+ * Howev// er, it's made things rather complicated in generating move order, for now I'm more concerned
+ * with // correctness of move gen rather than optimising move order, will keep this commented out 
+ * for n// ow and revisit once I'm confident move generation is correct.
+ * 
+        //     // start of checks for friendly pieces pinned to the enemy king 
+        //     // i.e. those that can cause a discovered check
+        //     
+        //     // get bitmasks of all pieces of that type
+        //     let mut friendly_piece_mask = bitboard.get_colour_piece_mask(piece, friendly_colour);
+        //     
+        //     // get the full attacks for the piece if it was on the enemy king square
+        //     let king_att_squares = self.get_single_piece_pseudo_attacks(
+        //         piece, 
+        //         friendly_colour, 
+        //         enemy_king_square, 
+        //         occupied 
+        //     );
+        //     
+        //     // iterate through those pieces one by one
+        //     while friendly_piece_mask != 0 {
+        //         let source_square = friendly_piece_mask & friendly_piece_mask.wrapping_neg();
+        //         
+        //         // get the full attacks for that piece on the source square
+        //         let friendly_piece_att_squares = self.get_single_piece_pseudo_attacks(
+        //             piece, 
+        //             friendly_colour, 
+        //             source_square, 
+        //             occupied 
+        //         );
+        //         
+        //         let piece_idx = source_square.trailing_zeros() as usize;
+        //         
+        //         // loop through each ray direction separately
+        //         for ray_direction in ray_tables.iter() {
+        //             // get the ray mask for that direction
+        //             let ray_mask = ray_direction.0[piece_idx];
+        //             let piece_ray_mask = ray_mask & friendly_piece_att_squares;
+        //             
+        //             // now get the mask for the opposite direction with the piece if placed on 
+        //             // the king square
+        //             let ray_mask = ray_direction.1[enemy_king_idx];
+        //             let king_ray_mask = ray_mask & king_att_squares;
+        //             
+        //             let pinned = piece_ray_mask & king_ray_mask & bitboard.get_colour_mask(friendly_colour);
+        //             
+        //             // means we have found a pinned piece for that piece, can skip the remaining
+        //             // ray directions as a piece can't pin a piece in multiple ray directions
+        //             // Technically this could incorrectly break early due to the comment above,
+        //             // but as that can only happen when the piece can have the king in check it 
+        //             // can't pin a piece in one of the other ray directions anyway
+        //             if pinned != 0 {
+        //                 // check that there's only one pinned piece
+        //                 debug_assert!(pinned.is_power_of_two());
+
+        //                 discovered_check_pseudo_legal_squares[num_discovered_checks as usize] = (
+        //                     bitboard.get_piece_type_from_mask(pinned),
+        //                     pinned,
+        //                     // the piece can move to any square that's not in the ray blocking the
+        //                     // enemy king to initiate discovered check, i.e. the rest of the board
+        //                     !(piece_ray_mask | king_ray_mask | source_square | enemy_king_square)
+        //                 );
+        //                 num_discovered_checks += 1;
+        //                 break;
+        //             }
+        //         }
+        //         // remove least significant bit from piece mask for next iteration
+        //         friendly_piece_mask ^= source_square;
+        //     }
+*-------// ------------------------------------------------------------------------------------------*/
+        // }
         
         // We now have the completed mask for pinned pieces, and have partially done the danger
         // squares with the pinned pieces. Now need to complete the danger squares with king, pawn,
@@ -1219,6 +1342,46 @@ impl AttackTable {
         }
     }
 }
+
+#[rustfmt::skip]
+const ROOK: [u64; 64] = [
+	0x01010101010101fe, 0x02020202020202fd, 0x04040404040404fb, 0x08080808080808f7, 
+	0x10101010101010ef, 0x20202020202020df, 0x40404040404040bf, 0x808080808080807f, 
+	0x010101010101fe01, 0x020202020202fd02, 0x040404040404fb04, 0x080808080808f708, 
+	0x101010101010ef10, 0x202020202020df20, 0x404040404040bf40, 0x8080808080807f80, 
+	0x0101010101fe0101, 0x0202020202fd0202, 0x0404040404fb0404, 0x0808080808f70808, 
+	0x1010101010ef1010, 0x2020202020df2020, 0x4040404040bf4040, 0x80808080807f8080, 
+	0x01010101fe010101, 0x02020202fd020202, 0x04040404fb040404, 0x08080808f7080808, 
+	0x10101010ef101010, 0x20202020df202020, 0x40404040bf404040, 0x808080807f808080, 
+	0x010101fe01010101, 0x020202fd02020202, 0x040404fb04040404, 0x080808f708080808, 
+	0x101010ef10101010, 0x202020df20202020, 0x404040bf40404040, 0x8080807f80808080, 
+	0x0101fe0101010101, 0x0202fd0202020202, 0x0404fb0404040404, 0x0808f70808080808, 
+	0x1010ef1010101010, 0x2020df2020202020, 0x4040bf4040404040, 0x80807f8080808080, 
+	0x01fe010101010101, 0x02fd020202020202, 0x04fb040404040404, 0x08f7080808080808, 
+	0x10ef101010101010, 0x20df202020202020, 0x40bf404040404040, 0x807f808080808080, 
+	0xfe01010101010101, 0xfd02020202020202, 0xfb04040404040404, 0xf708080808080808, 
+	0xef10101010101010, 0xdf20202020202020, 0xbf40404040404040, 0x7f80808080808080, 
+];
+
+#[rustfmt::skip]
+const BISHOP: [u64; 64] = [
+	0x8040201008040200, 0x0080402010080500, 0x0000804020110a00, 0x0000008041221400, 
+	0x0000000182442800, 0x0000010204885000, 0x000102040810a000, 0x0102040810204000, 
+	0x4020100804020002, 0x8040201008050005, 0x00804020110a000a, 0x0000804122140014, 
+	0x0000018244280028, 0x0001020488500050, 0x0102040810a000a0, 0x0204081020400040, 
+	0x2010080402000204, 0x4020100805000508, 0x804020110a000a11, 0x0080412214001422, 
+	0x0001824428002844, 0x0102048850005088, 0x02040810a000a010, 0x0408102040004020, 
+	0x1008040200020408, 0x2010080500050810, 0x4020110a000a1120, 0x8041221400142241, 
+	0x0182442800284482, 0x0204885000508804, 0x040810a000a01008, 0x0810204000402010, 
+	0x0804020002040810, 0x1008050005081020, 0x20110a000a112040, 0x4122140014224180, 
+	0x8244280028448201, 0x0488500050880402, 0x0810a000a0100804, 0x1020400040201008, 
+	0x0402000204081020, 0x0805000508102040, 0x110a000a11204080, 0x2214001422418000, 
+	0x4428002844820100, 0x8850005088040201, 0x10a000a010080402, 0x2040004020100804, 
+	0x0200020408102040, 0x0500050810204080, 0x0a000a1120408000, 0x1400142241800000, 
+	0x2800284482010000, 0x5000508804020100, 0xa000a01008040201, 0x4000402010080402, 
+	0x0002040810204080, 0x0005081020408000, 0x000a112040800000, 0x0014224180000000, 
+	0x0028448201000000, 0x0050880402010000, 0x00a0100804020100, 0x0040201008040201, 
+];
 
 #[rustfmt::skip]
 const NORTH: [u64; 64] = [
