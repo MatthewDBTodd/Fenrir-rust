@@ -10,6 +10,7 @@ pub mod sliding_piece;
 pub mod attack_table;
 pub mod chess_move;
 pub mod shared_perft;
+pub mod search_move;
 
 // #[cfg(test)]
 pub mod test_helpers;

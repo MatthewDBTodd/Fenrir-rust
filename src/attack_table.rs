@@ -19,6 +19,8 @@ pub struct AttackTable {
 }
 
 pub struct BoardStatus {
+    friendly_colour: Colour,
+    enemy_colour: Colour,
     // danger squares are attacked squares but also including rays behind the king
     // as they're used to show squares that would leave the king in check
     danger_squares: u64,
@@ -83,10 +85,14 @@ impl AttackTable {
         }
     }
     
-    pub fn generate_legal_moves(&self, board: &Board, moves: &mut [Move; 256]) -> usize {
+    // even though we can get turn colour from the board, we want to pass it in to allow for 
+    // position eval at leaf nodes, where part of the function is to evaluate number of legal moves
+    // for both sides
+    pub fn generate_legal_moves(&self, board: &Board, friendly_colour: Colour, 
+                                moves: &mut [Move; 256]) -> usize {
 
         let mut moves = MoveList::new(moves);
-        let board_status = self.get_board_status(&board.bitboard, board.turn_colour,);
+        let board_status = self.get_board_status(&board.bitboard, friendly_colour,);
         
         // first check if king is in double check
         // means we only generate king moves
@@ -216,13 +222,13 @@ impl AttackTable {
 
     fn get_king_captures(&self, board: &Board, moves: &mut MoveList, board_status: &BoardStatus) {
         let occupied = board.bitboard.get_entire_mask();
-        let enemy_colour_mask = board.bitboard.get_colour_mask(!&board.turn_colour);
-        let king_bitmask = board.bitboard.get_colour_piece_mask(Piece::King, board.turn_colour);
+        let enemy_colour_mask = board.bitboard.get_colour_mask(board_status.enemy_colour);
+        let king_bitmask = board.bitboard.get_colour_piece_mask(Piece::King, board_status.friendly_colour);
         let king_source_sq: Square = FromPrimitive::from_u32(king_bitmask.trailing_zeros()).unwrap();
         
         let king_captures = self.get_single_piece_captures(
             Piece::King, 
-            board.turn_colour, 
+            board_status.friendly_colour, 
             king_bitmask,
             occupied, 
             enemy_colour_mask,
@@ -234,7 +240,7 @@ impl AttackTable {
         // in descending order of piece value
         for captured_piece in [Piece::Queen, Piece::Rook, Piece::Bishop, Piece::Knight, Piece::Pawn] {
             let mut piece_captures = king_captures & board.bitboard.get_colour_piece_mask(
-                captured_piece, !&board.turn_colour,
+                captured_piece, board_status.enemy_colour,
             );
             // loop through each capture available for that piece type
             while piece_captures != 0 {
@@ -253,12 +259,12 @@ impl AttackTable {
 
     fn get_king_moves(&self, board: &Board, moves: &mut MoveList, board_status: &BoardStatus) {
         let occupied = board.bitboard.get_entire_mask();
-        let king_bitmask = board.bitboard.get_colour_piece_mask(Piece::King, board.turn_colour);
+        let king_bitmask = board.bitboard.get_colour_piece_mask(Piece::King, board_status.friendly_colour);
         let king_source_sq: Square = FromPrimitive::from_u32(king_bitmask.trailing_zeros()).unwrap();
         
         let king_moves = self.get_single_piece_moves(
             Piece::King,
-            board.turn_colour,
+            board_status.friendly_colour,
             king_bitmask,
             occupied,
         );
@@ -294,10 +300,10 @@ impl AttackTable {
         // as we only want the intersection with pawns we make the last argument just the pawn mask
         let mut ep_captures = self.get_single_piece_captures(
             Piece::Pawn,
-            !&board.turn_colour,
+            board_status.enemy_colour,
             ep_square_mask,
             occupied,
-            board.bitboard.get_colour_piece_mask(Piece::Pawn, board.turn_colour),
+            board.bitboard.get_colour_piece_mask(Piece::Pawn, board_status.friendly_colour),
         );
         
         // If there's two pawns that can perform en-passant, then we don't need to check for 
@@ -364,7 +370,7 @@ impl AttackTable {
                     
                     let king_mask = board.bitboard.get_colour_piece_mask(
                         Piece::King,
-                        board.turn_colour,
+                        board_status.friendly_colour,
                     );
                     // println!("king mask = {}", bitmask_to_board(king_mask));
                     
@@ -374,17 +380,17 @@ impl AttackTable {
                     // if removing both pawns reveals check, that can only happen horizontally
                     let rook_horizontal_attacks = self.get_single_piece_pseudo_attacks(
                         Piece::Rook, 
-                        !&board.turn_colour, 
+                        board_status.enemy_colour, 
                         king_mask, 
                         occupied_tmp
                     ) & (EAST[king_idx] | WEST[king_idx]);
 
                     let rook_queen_mask = board.bitboard.get_colour_piece_mask(
                         Piece::Rook,
-                        !&board.turn_colour,
+                        board_status.enemy_colour,
                     ) | board.bitboard.get_colour_piece_mask(
                         Piece::Queen,
-                        !&board.turn_colour,
+                        board_status.enemy_colour,
                     );
 
                     // results in check, that's illegal
@@ -407,7 +413,7 @@ impl AttackTable {
     fn get_captures(&self, board: &Board, moves: &mut MoveList, board_status: &BoardStatus) {
         let occupied = board.bitboard.get_entire_mask();
         for piece_type in [Piece::Pawn, Piece::Knight, Piece::Bishop, Piece::Rook, Piece::Queen] {
-            let all_pieces = board.bitboard.get_colour_piece_mask(piece_type, board.turn_colour);
+            let all_pieces = board.bitboard.get_colour_piece_mask(piece_type, board_status.friendly_colour);
 
             let mut unpinned = all_pieces & !board_status.pinned_pieces;
             while unpinned != 0 {
@@ -416,10 +422,10 @@ impl AttackTable {
                 
                 let captures = self.get_single_piece_captures(
                     piece_type,
-                    board.turn_colour,
+                    board_status.friendly_colour,
                     one_piece,
                     occupied,
-                    board.bitboard.get_colour_mask(!&board.turn_colour),
+                    board.bitboard.get_colour_mask(board_status.enemy_colour),
                 );
                 
                 if captures == 0 {
@@ -428,7 +434,7 @@ impl AttackTable {
                 // in reverse order of piece value
                 for captured_piece_type in [Piece::Queen, Piece::Rook, Piece::Bishop, Piece::Knight, Piece::Pawn] {
                     let mut all_captures_of_piece = captures & board.bitboard.get_colour_piece_mask(
-                        captured_piece_type, !&board.turn_colour,
+                        captured_piece_type, board_status.enemy_colour,
                     );
 
                     while all_captures_of_piece != 0 {
@@ -473,10 +479,10 @@ impl AttackTable {
 
                 let captures = self.get_single_piece_captures(
                     piece_type,
-                    board.turn_colour,
+                    board_status.friendly_colour,
                     pinned_piece,
                     occupied,
-                    board.bitboard.get_colour_mask(!&board.turn_colour),
+                    board.bitboard.get_colour_mask(board_status.enemy_colour),
                 );
                 
                 let legal_captures = captures & pseudo_legal_squares;
@@ -484,7 +490,7 @@ impl AttackTable {
                 // in reverse order of piece value
                 for captured_piece_type in [Piece::Queen, Piece::Rook, Piece::Bishop, Piece::Knight, Piece::Pawn] {
                     let mut all_captures_of_piece = legal_captures & board.bitboard.get_colour_piece_mask(
-                        captured_piece_type, !&board.turn_colour,
+                        captured_piece_type, board_status.enemy_colour,
                     );
 
                     while all_captures_of_piece != 0 {
@@ -519,7 +525,7 @@ impl AttackTable {
         for piece_type in [Piece::Pawn, Piece::Knight, Piece::Bishop, Piece::Rook, Piece::Queen] {
             let mut all_pieces = board.bitboard.get_colour_piece_mask(
                 piece_type,
-                board.turn_colour,
+                board_status.friendly_colour,
             );
 
             while all_pieces != 0 {
@@ -530,7 +536,7 @@ impl AttackTable {
 
                 let quiet_moves = self.get_single_piece_moves(
                     piece_type,
-                    board.turn_colour,
+                    board_status.friendly_colour,
                     one_piece,
                     occupied,
                 );
@@ -593,7 +599,7 @@ impl AttackTable {
     */
     fn get_out_of_single_check(&self, board: &Board, moves: &mut MoveList, board_status: &BoardStatus) {
         let occupied = board.bitboard.get_entire_mask();
-        let enemy_colour_mask = board.bitboard.get_colour_mask(!&board.turn_colour);
+        let enemy_colour_mask = board.bitboard.get_colour_mask(board_status.enemy_colour);
         let (checking_piece, checking_piece_mask, block_squares) = board_status.king_attacking_pieces[0];
         
         let checking_piece_sq: Square = FromPrimitive::from_u32(checking_piece_mask.trailing_zeros()).unwrap();
@@ -601,7 +607,7 @@ impl AttackTable {
         // Captures of the checking piece first. Non king pieces can only capture the checking 
         // piece to stop check
         for piece_type in [Piece::Pawn, Piece::Knight, Piece::Bishop, Piece::Rook, Piece::Queen] {
-            let mut all_pieces = board.bitboard.get_colour_piece_mask(piece_type, board.turn_colour);
+            let mut all_pieces = board.bitboard.get_colour_piece_mask(piece_type, board_status.friendly_colour);
             
             // a pinned piece can't do anything about stopping check, remove them
             all_pieces &= !board_status.pinned_pieces;
@@ -612,7 +618,7 @@ impl AttackTable {
 
                 let captures = self.get_single_piece_captures(
                     piece_type,
-                    board.turn_colour,
+                    board_status.friendly_colour,
                     one_piece, 
                     occupied,
                     enemy_colour_mask,
@@ -681,10 +687,10 @@ impl AttackTable {
                 // as we only want the intersection with pawns we make the last argument just the pawn mask
                 let mut ep_captures = self.get_single_piece_captures(
                     Piece::Pawn,
-                    !&board.turn_colour,
+                    board_status.enemy_colour,
                     ep_square_mask,
                     occupied,
-                    board.bitboard.get_colour_piece_mask(Piece::Pawn, board.turn_colour),
+                    board.bitboard.get_colour_piece_mask(Piece::Pawn, board_status.friendly_colour),
                 );
 
                 while ep_captures != 0 {
@@ -711,13 +717,13 @@ impl AttackTable {
         // Only sliding pieces can be blocked
         if [Piece::Queen, Piece::Rook, Piece::Bishop].contains(&checking_piece) {
             for piece_type in [Piece::Pawn, Piece::Knight, Piece::Bishop, Piece::Rook, Piece::Queen]  {
-                let mut all_pieces = board.bitboard.get_colour_piece_mask(piece_type, board.turn_colour);
+                let mut all_pieces = board.bitboard.get_colour_piece_mask(piece_type, board_status.friendly_colour);
                 while all_pieces != 0 {
                     let one_piece = all_pieces & all_pieces.wrapping_neg();
                     all_pieces ^= one_piece;
                     let mut piece_moves = self.get_single_piece_moves(
                         piece_type,
-                        board.turn_colour,
+                        board_status.friendly_colour,
                         one_piece,
                         occupied,
                     ) & block_squares;
@@ -768,7 +774,7 @@ impl AttackTable {
     }
     
     fn get_legal_castling_rights(&self, board: &Board, moves: &mut MoveList, board_status: &BoardStatus) {
-        let (mut kingside, mut queenside) = board.castling_rights.can_castle(board.turn_colour);
+        let (mut kingside, mut queenside) = board.castling_rights.can_castle(board_status.friendly_colour);
         
         // For castling we have to check that:
         // 1. The intermediate squares between the king and rook are empty
@@ -779,7 +785,7 @@ impl AttackTable {
         // still queenside castle if b1 is under attack as the king does not traverse
         // it
         if kingside {
-            let king_travel_squares: u64 = match board.turn_colour {
+            let king_travel_squares: u64 = match board_status.friendly_colour {
                 Colour::White => 0x60,
                 Colour::Black => 0x6000000000000000,
             };
@@ -788,7 +794,7 @@ impl AttackTable {
         }
         
         if queenside {
-            let (in_between_squares, king_travel_squares): (u64, u64) = match board.turn_colour {
+            let (in_between_squares, king_travel_squares): (u64, u64) = match board_status.friendly_colour {
                 Colour::White => (0xE, 0xC),
                 Colour::Black => (0xE00000000000000, 0xC00000000000000),
             };
@@ -797,7 +803,7 @@ impl AttackTable {
         }
 
         if kingside {
-            let (source_sq, dest_sq) = match board.turn_colour {
+            let (source_sq, dest_sq) = match board_status.friendly_colour {
                 Colour::White => (Square::E1, Square::G1),
                 Colour::Black => (Square::E8, Square::G8),
             };
@@ -811,7 +817,7 @@ impl AttackTable {
         }
 
         if queenside {
-            let (source_sq, dest_sq) = match board.turn_colour {
+            let (source_sq, dest_sq) = match board_status.friendly_colour {
                 Colour::White => (Square::E1, Square::C1),
                 Colour::Black => (Square::E8, Square::C8),
             };
@@ -1213,6 +1219,8 @@ impl AttackTable {
         }
 
         BoardStatus {
+            friendly_colour,
+            enemy_colour,
             danger_squares,
             pinned_pieces,
             pinned_pseudo_legal_squares: pinned_legal_squares,
