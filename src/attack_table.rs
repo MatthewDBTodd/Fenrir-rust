@@ -7,6 +7,7 @@ use crate::{king, knight, Piece, Colour, Square};
 use crate::chess_move::{Move, MoveType};
 use crate::bitboard::BitBoard;
 use crate::test_helpers::bitmask_to_board;
+include!("blocker_table.rs");
 
 pub struct AttackTable {
     king: Vec<u64>,
@@ -937,8 +938,6 @@ impl AttackTable {
      */
 
     pub fn get_board_status(&self, bitboard: &BitBoard, friendly_colour: Colour) -> BoardStatus {
-        // println!("{:?}", bitboard);
-        // println!("line {}", line!());
         // first get the king bitboard for the colour to move
         let friendly_king_square = bitboard.get_colour_piece_mask(Piece::King, friendly_colour);
         let friendly_king_idx = friendly_king_square.trailing_zeros() as usize;
@@ -956,14 +955,6 @@ impl AttackTable {
         // iterate through the sliding pieces of the opposite colour
         let enemy_colour = !&friendly_colour;
 
-        // needed to get squares friendly pieces can move to to put the enemy king in check
-        let enemy_king_square = bitboard.get_colour_piece_mask(Piece::King, enemy_colour);
-
-        debug_assert!(enemy_king_square.is_power_of_two(), "colour = {:?} board = {:?} enemy king = {} {}", 
-            friendly_colour, bitboard, bitmask_to_board(enemy_king_square), enemy_king_square);
-
-        debug_assert!(enemy_king_square.is_power_of_two());
-
         // will mark danger squares while calculating pinned pieces 
         let mut danger_squares: u64 = 0;
         let mut pinned_pieces: u64 = 0;
@@ -978,34 +969,20 @@ impl AttackTable {
         // let mut discovered_check_pseudo_legal_squares: [(Piece, u64, u64); 8] = [(Piece::Pawn, 0, 0); 8];
         // let mut num_discovered_checks: u8 = 0;
         // let mut check_squares: [u64; 6] = [0, 0, 0, 0, 0, 0];
+
+        let king_blockers = self.get_single_piece_captures(
+            Piece::Queen,
+            enemy_colour,
+            friendly_king_square,
+            occupied,
+            bitboard.get_colour_mask(friendly_colour),
+        );
+
+        let unobstructed_rook_mask = ROOK[friendly_king_idx];
+        let unobstructed_bishop_mask = BISHOP[friendly_king_idx];
+        let unobstructed_queen_mask = unobstructed_rook_mask | unobstructed_bishop_mask;
         
         for piece in [Piece::Bishop, Piece::Rook, Piece::Queen] {
-            let ray_tables = match piece {
-                Piece::Bishop => vec![
-                    (&NORTH_EAST, &SOUTH_WEST),
-                    (&NORTH_WEST, &SOUTH_EAST),
-                    (&SOUTH_EAST, &NORTH_WEST),
-                    (&SOUTH_WEST, &NORTH_EAST),
-                ],
-                Piece::Rook => vec![
-                    (&NORTH, &SOUTH),
-                    (&SOUTH, &NORTH),
-                    (&EAST, &WEST),
-                    (&WEST, &EAST),
-                ],
-                Piece::Queen => vec![
-                    (&NORTH, &SOUTH),
-                    (&SOUTH, &NORTH),
-                    (&EAST, &WEST),
-                    (&WEST, &EAST),
-                    (&NORTH_EAST, &SOUTH_WEST),
-                    (&NORTH_WEST, &SOUTH_EAST),
-                    (&SOUTH_EAST, &NORTH_WEST),
-                    (&SOUTH_WEST, &NORTH_EAST),
-                ],
-                _ => panic!("This should not happen"),
-            };
-            
             // for that piece, also add check squares friendly pieces can move to
             // to put the enemy king in check
             // we put the colour as enemy colour as colour only affects the 
@@ -1022,18 +999,10 @@ impl AttackTable {
             // get bitmasks of all pieces of that type
             let mut enemy_piece_mask = bitboard.get_colour_piece_mask(piece, enemy_colour);
             
-            // get the full attacks for the piece if it was on the friendly king square
-            let king_att_squares = self.get_single_piece_pseudo_attacks(
-                piece, 
-                enemy_colour, 
-                friendly_king_square, 
-                kingless_mask
-            );
-            
-            // iterate through those pieces one by one
             while enemy_piece_mask != 0 {
                 // single out the least significant bit
                 let source_square = enemy_piece_mask & enemy_piece_mask.wrapping_neg();
+                enemy_piece_mask ^= source_square;
                 
                 // get the full attacks for that piece on the source square
                 let enemy_piece_att_squares = self.get_single_piece_pseudo_attacks(
@@ -1045,57 +1014,92 @@ impl AttackTable {
                 
                 // add to danger squares
                 danger_squares |= enemy_piece_att_squares;
+
+                // king in check
+                if enemy_piece_att_squares & friendly_king_square != 0 {
+                    king_attacking_pieces[num_checking_pieces as usize] = 
+                        (piece, 
+                        source_square, 
+                        BLOCKER_TABLE[source_square.trailing_zeros() as usize][friendly_king_idx]);
+                    num_checking_pieces += 1;
+                    continue;
+                }
+
+                let unobstructed_mask = match piece {
+                    Piece::Rook => unobstructed_rook_mask,
+                    Piece::Bishop => unobstructed_bishop_mask,
+                    Piece::Queen => unobstructed_queen_mask,
+                    _ => panic!("This should not happen"),
+                };
+
+                // means the piece and the king are not on the same rays, don't need to check for 
+                // pins
+                if unobstructed_mask & source_square == 0 {
+                    continue;
+                }
                 
+
+                // Only candidate pinned pieces at this point, as a queen could be attacking a 
+                // king blocker not on the same ray as the king. e.g. the pawn on B3 in the position
+                // 8/8/1q6/8/3Q4/1P2K3/8/8 w - - 0 1, the pawn is a blocker for the king to the west
+                // and is also under attack by the queen, but it is not pinned
+                let pin_candidates = king_blockers & enemy_piece_att_squares;
+
+                // despite being on the same ray, there's other pieces in the way
+                if pin_candidates == 0 {
+                    continue;
+                }
+
                 let piece_idx = source_square.trailing_zeros() as usize;
 
-                // loop through each ray direction separately
+                // TODO: find a way to stop this being a vector
+                let ray_tables = match piece {
+                    Piece::Bishop if piece_idx > friendly_king_idx => vec![
+                        (&SOUTH_EAST, &NORTH_WEST),
+                        (&SOUTH_WEST, &NORTH_EAST),
+                    ],
+                    Piece::Bishop => vec![
+                        (&NORTH_EAST, &SOUTH_WEST),
+                        (&NORTH_WEST, &SOUTH_EAST),
+                    ],
+                    Piece::Rook if piece_idx > friendly_king_idx => vec![
+                        (&SOUTH, &NORTH),
+                        (&WEST, &EAST),
+                    ],
+                    Piece::Rook => vec![
+                        (&NORTH, &SOUTH),
+                        (&EAST, &WEST),
+                    ],
+                    Piece::Queen if piece_idx > friendly_king_idx => vec![
+                        (&SOUTH, &NORTH),
+                        (&WEST, &EAST),
+                        (&SOUTH_EAST, &NORTH_WEST),
+                        (&SOUTH_WEST, &NORTH_EAST),
+                    ],
+                    Piece::Queen => vec![
+                        (&NORTH, &SOUTH),
+                        (&EAST, &WEST),
+                        (&NORTH_EAST, &SOUTH_WEST),
+                        (&NORTH_WEST, &SOUTH_EAST),
+                    ],
+                    _ => panic!("This should not happen"),
+                };
+                
                 for ray_direction in ray_tables.iter() {
-                    // get the ray mask for that direction
-                    let ray_mask = ray_direction.0[piece_idx];
-                    let piece_ray_mask = ray_mask & enemy_piece_att_squares;
-                    
-                    // now get the mask for the opposite direction with the piece if placed on 
-                    // the king square
-                    let ray_mask = ray_direction.1[friendly_king_idx];
-                    let king_ray_mask = ray_mask & king_att_squares;
-                    
-                    // check if king is in check via the king ray mask
-                    // third element is just the block squares
-                    if king_ray_mask & source_square == source_square {
-                        king_attacking_pieces[num_checking_pieces as usize] = (piece, source_square, king_ray_mask ^ source_square);
-                        num_checking_pieces += 1;
-                    }
-                    
-                    // intersection of the two 
-                    // If there's no pieces in between the sliding piece and the king, 
-                    // i.e. the king is in check, this algorithm will incorrectly mark all the 
-                    // intermediate squares between the two as pinned, as the two opposite rays
-                    // overlap in all the intermediate squares. e.g. on the board
-                    // "8/8/8/4k3/8/2r3P1/8/Q3R3 w - - 0 1" it incorrectly marks E2, E3 and E4 as
-                    // "pinned". The intersection with the colour mask removes that.
-                    let pinned = piece_ray_mask & king_ray_mask & bitboard.get_colour_mask(friendly_colour);
-                    
+                    let pinned = ray_direction.0[piece_idx] &
+                                 ray_direction.1[friendly_king_idx] & 
+                                 pin_candidates;
                     pinned_pieces |= pinned;
-
-                    // means we have found a pinned piece for that piece, can skip the remaining
-                    // ray directions as a piece can't pin a piece in multiple ray directions
-                    // Technically this could incorrectly break early due to the comment above,
-                    // but as that can only happen when the piece can have the king in check it 
-                    // can't pin a piece in one of the other ray directions anyway
                     if pinned != 0 {
-                        // check there's only one pinned piece
                         debug_assert!(pinned.is_power_of_two());
-                        // The pinned piece can only move along the ray direction from the king to
-                        // the pinning piece (including capturing), so just union the two masks and
-                        // the source_square of the pinning piece as that hasn't been included in 
-                        // its attack mask
-                        pinned_legal_squares[num_pinned] = (pinned, piece_ray_mask | king_ray_mask | source_square);
+                        pinned_legal_squares[num_pinned] = (
+                            pinned,
+                            ray_direction.0[piece_idx] | ray_direction.1[friendly_king_idx],
+                        );
                         num_pinned += 1;
                         break;
                     }
                 }
-                // remove least significant bit from piece mask for next iteration
-                enemy_piece_mask ^= source_square;
             }
 /* -------------------------------------------------------------------------------------------------
  * This section calculates potential discovered checks for the friendly colour
@@ -1187,6 +1191,8 @@ impl AttackTable {
 
             while source_squares != 0 {
                 let source_square = source_squares & source_squares.wrapping_neg();
+                source_squares ^= source_square;
+
                 let attacking_squares = self.get_single_piece_pseudo_attacks(
                     piece, 
                     enemy_colour, 
@@ -1203,7 +1209,6 @@ impl AttackTable {
                     king_attacking_pieces[num_checking_pieces as usize] = (piece, source_square, source_square);
                     num_checking_pieces += 1;
                 }
-                source_squares ^= source_square;
             }
         }
 
@@ -1219,6 +1224,47 @@ impl AttackTable {
         }
     }
 }
+
+#[rustfmt::skip]
+const ROOK: [u64; 64] = [
+	0x01010101010101fe, 0x02020202020202fd, 0x04040404040404fb, 0x08080808080808f7, 
+	0x10101010101010ef, 0x20202020202020df, 0x40404040404040bf, 0x808080808080807f, 
+	0x010101010101fe01, 0x020202020202fd02, 0x040404040404fb04, 0x080808080808f708, 
+	0x101010101010ef10, 0x202020202020df20, 0x404040404040bf40, 0x8080808080807f80, 
+	0x0101010101fe0101, 0x0202020202fd0202, 0x0404040404fb0404, 0x0808080808f70808, 
+	0x1010101010ef1010, 0x2020202020df2020, 0x4040404040bf4040, 0x80808080807f8080, 
+	0x01010101fe010101, 0x02020202fd020202, 0x04040404fb040404, 0x08080808f7080808, 
+	0x10101010ef101010, 0x20202020df202020, 0x40404040bf404040, 0x808080807f808080, 
+	0x010101fe01010101, 0x020202fd02020202, 0x040404fb04040404, 0x080808f708080808, 
+	0x101010ef10101010, 0x202020df20202020, 0x404040bf40404040, 0x8080807f80808080, 
+	0x0101fe0101010101, 0x0202fd0202020202, 0x0404fb0404040404, 0x0808f70808080808, 
+	0x1010ef1010101010, 0x2020df2020202020, 0x4040bf4040404040, 0x80807f8080808080, 
+	0x01fe010101010101, 0x02fd020202020202, 0x04fb040404040404, 0x08f7080808080808, 
+	0x10ef101010101010, 0x20df202020202020, 0x40bf404040404040, 0x807f808080808080, 
+	0xfe01010101010101, 0xfd02020202020202, 0xfb04040404040404, 0xf708080808080808, 
+	0xef10101010101010, 0xdf20202020202020, 0xbf40404040404040, 0x7f80808080808080, 
+	];
+
+#[rustfmt::skip]
+const BISHOP: [u64; 64] = [
+	0x8040201008040200, 0x0080402010080500, 0x0000804020110a00, 0x0000008041221400, 
+	0x0000000182442800, 0x0000010204885000, 0x000102040810a000, 0x0102040810204000, 
+	0x4020100804020002, 0x8040201008050005, 0x00804020110a000a, 0x0000804122140014, 
+	0x0000018244280028, 0x0001020488500050, 0x0102040810a000a0, 0x0204081020400040, 
+	0x2010080402000204, 0x4020100805000508, 0x804020110a000a11, 0x0080412214001422, 
+	0x0001824428002844, 0x0102048850005088, 0x02040810a000a010, 0x0408102040004020, 
+	0x1008040200020408, 0x2010080500050810, 0x4020110a000a1120, 0x8041221400142241, 
+	0x0182442800284482, 0x0204885000508804, 0x040810a000a01008, 0x0810204000402010, 
+	0x0804020002040810, 0x1008050005081020, 0x20110a000a112040, 0x4122140014224180, 
+	0x8244280028448201, 0x0488500050880402, 0x0810a000a0100804, 0x1020400040201008, 
+	0x0402000204081020, 0x0805000508102040, 0x110a000a11204080, 0x2214001422418000, 
+	0x4428002844820100, 0x8850005088040201, 0x10a000a010080402, 0x2040004020100804, 
+	0x0200020408102040, 0x0500050810204080, 0x0a000a1120408000, 0x1400142241800000, 
+	0x2800284482010000, 0x5000508804020100, 0xa000a01008040201, 0x4000402010080402, 
+	0x0002040810204080, 0x0005081020408000, 0x000a112040800000, 0x0014224180000000, 
+	0x0028448201000000, 0x0050880402010000, 0x00a0100804020100, 0x0040201008040201, 
+	];
+
 
 #[rustfmt::skip]
 const NORTH: [u64; 64] = [
