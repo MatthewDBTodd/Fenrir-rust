@@ -70,6 +70,14 @@ impl<'a> MoveList<'a> {
         self.moves[self.num_moves] = chess_move;
         self.num_moves += 1;
     }
+
+    fn get_idx(&self) -> usize {
+        self.num_moves
+    }
+
+    fn get_slice(&mut self, start: usize) -> &mut [Move] {
+        &mut self.moves[start..self.num_moves]
+    }
 }
 
 impl AttackTable {
@@ -411,7 +419,76 @@ impl AttackTable {
     }
 
     fn get_captures(&self, board: &Board, moves: &mut MoveList, board_status: &BoardStatus) {
+        // get all captures first
+
+/* 
+// Better capture ordering but 2-3 times slower
+
         let occupied = board.bitboard.get_entire_mask();
+        for captured_piece_type in [Piece::Queen, Piece::Rook, Piece::Bishop, Piece::Knight, Piece::Pawn] {
+            let mut all_pieces = board.bitboard.get_colour_piece_mask(
+                captured_piece_type, board_status.enemy_colour
+            );
+            while all_pieces != 0 {
+                let one_captured_piece = all_pieces & all_pieces.wrapping_neg();
+                all_pieces ^= one_captured_piece;
+
+                for capturing_piece in [Piece::Pawn, Piece::Knight, Piece::Bishop, Piece::Rook, Piece::Queen] {
+                    let all_capturing_pieces = board.bitboard.get_colour_piece_mask(
+                        capturing_piece, board_status.friendly_colour,
+                    );
+                    let mut candidate_captures = self.get_single_piece_captures(
+                        capturing_piece, board_status.enemy_colour, one_captured_piece,
+                        occupied, all_capturing_pieces,
+                    );
+                    while candidate_captures != 0 {
+                        let single_capture = candidate_captures & candidate_captures.wrapping_neg();
+                        candidate_captures ^= single_capture;
+
+                        if single_capture & board_status.pinned_pieces != 0 {
+                            let pseudo_legal_squares = board_status.pinned_pseudo_legal_squares
+                                .iter()
+                                .find(|&&(first, _)| first == single_capture)
+                                .map(|&(_, second)| second)
+                                .unwrap();
+
+                            if one_captured_piece & pseudo_legal_squares == 0 {
+                                continue;
+                            }
+                        }
+
+                        let source_sq = FromPrimitive::from_u32(single_capture.trailing_zeros()).unwrap();
+                        let dest_sq = FromPrimitive::from_u32(one_captured_piece.trailing_zeros()).unwrap();
+                        
+                        if capturing_piece == Piece::Pawn && 
+                            (one_captured_piece & 0xFF00000000000000 != 0 || 
+                                one_captured_piece & 0xFF != 0) {
+
+                            for promotion_piece in [Piece::Queen, Piece::Rook, Piece::Bishop, Piece::Knight] {
+                                moves.push(Move {
+                                    source_sq,
+                                    dest_sq,
+                                    piece: Piece::Pawn,
+                                    move_type: MoveType::CapturePromotion(captured_piece_type, promotion_piece),
+                                });
+                            }
+                        } else {
+                            moves.push(Move {
+                                source_sq,
+                                dest_sq,
+                                piece: capturing_piece,
+                                move_type: MoveType::Capture(captured_piece_type), 
+                            });
+                        }
+                    } 
+                }
+            }
+        }
+*/
+
+// Worse capture ordering, but 2-3 times faster
+        let occupied = board.bitboard.get_entire_mask();
+        let start_idx = moves.get_idx();
         for piece_type in [Piece::Pawn, Piece::Knight, Piece::Bishop, Piece::Rook, Piece::Queen] {
             let all_pieces = board.bitboard.get_colour_piece_mask(piece_type, board_status.friendly_colour);
 
@@ -518,6 +595,25 @@ impl AttackTable {
                 }
             }
         }
+
+        // sort captures by value gaind
+        let captures = moves.get_slice(start_idx);
+        // println!("captures before = {:?}", captures);
+        let val_fn = |chess_move: &Move| {
+            let captured_piece = match chess_move.move_type {
+                MoveType::Capture(p) => p, 
+                MoveType::CapturePromotion(p, _) => p,
+                _ => panic!("Invalid move type"),
+            };
+            let piece_values = [1.0, 200.0, 9.0, 3.0, 3.0, 5.0];
+            piece_values[captured_piece as usize] - piece_values[chess_move.piece as usize]
+        };
+        captures.sort_by(|a, b| {
+            let a_val = val_fn(a);
+            let b_val = val_fn(b);
+            b_val.partial_cmp(&a_val).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        // println!("captures after = {:?}", captures);
     }
 
     fn get_quiet_moves(&self, board: &Board, moves: &mut MoveList, board_status: &BoardStatus) {
