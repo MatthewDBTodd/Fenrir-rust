@@ -133,6 +133,15 @@ impl BitBoard {
         self.get_piece_type_from_mask(mask)
     }
 
+    // returns number of the given piece type for (white, black)
+    // used for board evaluation
+    pub fn num_pieces(&self, piece_type: Piece) -> (u32, u32) {
+        (
+            self.get_colour_piece_mask(piece_type, Colour::White).count_ones(),
+            self.get_colour_piece_mask(piece_type, Colour::Black).count_ones(),
+        )
+    }
+
     // Fen represents white pieces with uppercase and black with lowercase
     pub fn get_square_char(&self, square: Square) -> char {
         let square_mask = get_square_mask(square);

@@ -8,7 +8,7 @@ pub fn perft_debug(board: &mut Board, attack_table: &AttackTable, depth: u32, ve
     assert!(depth > 0, "depth = {depth}");
     let mut move_list = [Move::default(); 256];
 
-    let legal_moves = attack_table.generate_legal_moves(board, &mut move_list);
+    let legal_moves = attack_table.generate_legal_moves(board, board.turn_colour, &mut move_list);
 
     if depth == 1 {
         for i in 0..legal_moves {
@@ -38,7 +38,7 @@ pub fn perft(board: &mut Board, attack_table: &AttackTable, depth: u32, verbose:
 
     let mut move_list = [Move::default(); 256];
 
-    let legal_moves = attack_table.generate_legal_moves(board, &mut move_list);
+    let legal_moves = attack_table.generate_legal_moves(board, board.turn_colour, &mut move_list);
 
     if depth == 1 {
         if verbose {
@@ -58,7 +58,7 @@ pub fn perft(board: &mut Board, attack_table: &AttackTable, depth: u32, verbose:
     nodes
 }
 
-fn move_string(chess_move: &Move) -> String {
+pub fn move_string(chess_move: &Move) -> String {
     let squares: [&str; 64] = [
         "a1", "b1", "c1", "d1", "e1", "f1", "g1", "h1",
         "a2", "b2", "c2", "d2", "e2", "f2", "g2", "h2",
