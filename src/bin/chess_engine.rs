@@ -49,9 +49,10 @@ fn main() {
                 let depth = depth.unwrap();
                 println!("Searching for best move at depth {depth}...");
                 let start = Instant::now();
-                let (best_move, eval) = search_position(&mut board, &attack_table, depth);
+                let (best_move, eval, mc, pc) = search_position(&mut board, &attack_table, depth);
                 let duration = start.elapsed().as_secs_f64();
                 println!("Best move = {} with eval = {eval}. Found in {} seconds", move_string(&best_move), duration);
+                println!("{mc} moves generated with {pc} branches pruned.");
                 board.make_move(best_move);
             } else {
                 println!("invalid input");

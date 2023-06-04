@@ -4,11 +4,21 @@ pub const CHECKMATE: f64 = 100_000f64;
 const WHITE_MULTIPLIER: f64 = 1.0;
 const BLACK_MULTIPLIER: f64 = -1.0;
 
+static mut move_counter: u64 = 0;
+static mut prune_counter: u64 = 0;
+
 // alpha-beta search. Returns best move with its eval
-pub fn search_position(board: &mut Board, attack_table: &AttackTable, depth: u32) -> (Move, f64) {
-    match board.turn_colour {
+pub fn search_position(board: &mut Board, attack_table: &AttackTable, depth: u32) -> (Move, f64, u64, u64) {
+    let (m, e) = match board.turn_colour {
         Colour::White => alpha_beta_max(board, attack_table, depth, f64::MIN, f64::MAX),
         Colour::Black => alpha_beta_min(board, attack_table, depth, f64::MIN, f64::MAX),
+    };
+    unsafe {
+        let mc = move_counter;
+        let pc = prune_counter;
+
+        prune_counter = 0;
+        (m, e, mc, pc)
     }
 }
 
@@ -20,6 +30,9 @@ fn alpha_beta_max(board: &mut Board, attack_table: &AttackTable, depth: u32, mut
     let num_moves = attack_table.generate_legal_moves(board, board.turn_colour, &mut move_list);
     if num_moves == 0 {
         return (Move::default(), -CHECKMATE);
+    }
+    unsafe {
+        move_counter += num_moves as u64;
     }
     let mut best_eval: f64 = f64::MIN;
     let mut best_move = Move::default();
@@ -37,6 +50,9 @@ fn alpha_beta_max(board: &mut Board, attack_table: &AttackTable, depth: u32, mut
         }
         if move_eval >= beta {
             // println!("beta pruning");
+            unsafe {
+                prune_counter += 1;
+            }
             break;
         }
         alpha = alpha.max(move_eval);
@@ -52,6 +68,9 @@ fn alpha_beta_min(board: &mut Board, attack_table: &AttackTable, depth: u32, mut
     let num_moves = attack_table.generate_legal_moves(board, board.turn_colour, &mut move_list);
     if num_moves == 0 {
         return (Move::default(), CHECKMATE);
+    }
+    unsafe {
+        move_counter += num_moves as u64;
     }
     let mut best_eval: f64 = f64::MAX;
     let mut best_move = Move::default();
@@ -69,6 +88,9 @@ fn alpha_beta_min(board: &mut Board, attack_table: &AttackTable, depth: u32, mut
         }
         if move_eval <= alpha {
             // println!("alpha pruning");
+            unsafe {
+                prune_counter += 1;
+            }
             break;
         }
         beta = beta.min(move_eval);
