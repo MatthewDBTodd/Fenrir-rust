@@ -1,6 +1,6 @@
 use crate::{board::Board, attack_table::AttackTable, chess_move::Move, Colour, Piece};
 
-pub const CHECKMATE: f64 = 100_000f64;
+pub const CHECKMATE: i32 = 100_000;
 const WHITE_MULTIPLIER: f64 = 1.0;
 const BLACK_MULTIPLIER: f64 = -1.0;
 
@@ -9,10 +9,13 @@ static mut prune_counter: u64 = 0;
 static mut moves_explored: u64 = 0;
 
 // alpha-beta search. Returns best move with its eval
-pub fn search_position(board: &mut Board, attack_table: &AttackTable, depth: u32) -> (Move, f64, u64, u64) {
+pub fn search_position(
+    board: &mut Board, attack_table: &AttackTable, depth: u32
+) -> (Move, i32, u64, u64) {
+
     let (m, e) = match board.turn_colour {
-        Colour::White => alpha_beta_max(board, attack_table, depth, f64::MIN, f64::MAX),
-        Colour::Black => alpha_beta_min(board, attack_table, depth, f64::MIN, f64::MAX),
+        Colour::White => alpha_beta_max(board, attack_table, depth, i32::MIN, i32::MAX),
+        Colour::Black => alpha_beta_min(board, attack_table, depth, i32::MIN, i32::MAX),
     };
     unsafe {
         let mc = move_counter;
@@ -23,7 +26,10 @@ pub fn search_position(board: &mut Board, attack_table: &AttackTable, depth: u32
     }
 }
 
-fn alpha_beta_max(board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha: f64, mut beta: f64) -> (Move, f64) {
+fn alpha_beta_max(
+    board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha: i32, 
+    mut beta: i32) -> (Move, i32) {
+
     if depth == 0 {
         return (Move::default(), eval_position(board, attack_table));
     }
@@ -35,7 +41,7 @@ fn alpha_beta_max(board: &mut Board, attack_table: &AttackTable, depth: u32, mut
     unsafe {
         move_counter += num_moves as u64;
     }
-    let mut best_eval: f64 = f64::MIN;
+    let mut best_eval: i32 = i32::MIN;
     let mut best_move = Move::default();
     for i in 0..num_moves {
         // println!("alpha beta MAX: depth {depth}. Checking {:?}", move_list[i]);
@@ -61,7 +67,10 @@ fn alpha_beta_max(board: &mut Board, attack_table: &AttackTable, depth: u32, mut
     (best_move, best_eval)
 }
 
-fn alpha_beta_min(board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha: f64, mut beta: f64) -> (Move, f64) {
+fn alpha_beta_min(
+    board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha: i32, 
+    mut beta: i32) -> (Move, i32) {
+
     if depth == 0 {
         return (Move::default(), eval_position(board, attack_table));
     }
@@ -73,7 +82,7 @@ fn alpha_beta_min(board: &mut Board, attack_table: &AttackTable, depth: u32, mut
     unsafe {
         move_counter += num_moves as u64;
     }
-    let mut best_eval: f64 = f64::MAX;
+    let mut best_eval: i32 = i32::MAX;
     let mut best_move = Move::default();
     for i in 0..num_moves {
         // println!("alpha beta MIN: depth {depth}. Checking {:?}", move_list[i]);
@@ -99,7 +108,7 @@ fn alpha_beta_min(board: &mut Board, attack_table: &AttackTable, depth: u32, mut
     (best_move, best_eval)
 }
 
-fn eval_position(board: &Board, attack_table: &AttackTable) -> f64 {
+fn eval_position(board: &Board, attack_table: &AttackTable) -> i32 {
     let mut move_list = [Move::default(); 256];
     let white_legal_moves = attack_table.generate_legal_moves(board, Colour::White, &mut move_list);
     if white_legal_moves == 0 {
@@ -109,22 +118,22 @@ fn eval_position(board: &Board, attack_table: &AttackTable) -> f64 {
     if black_legal_moves == 0 {
         return CHECKMATE;
     }
-    let mut eval: f64 = 0.0;
+    let mut eval: i32 = 0;
     for (piece_type, weight) in [
-        (Piece::Queen, 9f64),
-        (Piece::Rook, 5f64),
-        (Piece::Bishop, 3f64),
-        (Piece::Knight, 3f64),
-        (Piece::Pawn, 1f64),
+        (Piece::Queen, 900),
+        (Piece::Rook, 500),
+        (Piece::Bishop, 300),
+        (Piece::Knight, 300),
+        (Piece::Pawn, 100),
     ] {
         let (white_count, black_count) = board.bitboard.num_pieces(piece_type);
-        eval += (weight * (white_count as f64 - black_count as f64));
+        eval += weight * (white_count as i32 - black_count as i32);
     }
-    eval += 0.1 * (white_legal_moves as f64 - black_legal_moves as f64);
+    eval += 10 * (white_legal_moves as i32 - black_legal_moves as i32);
 
     let (w_doubled, w_isolated) = pawn_eval(board, Colour::White);
     let (b_doubled, b_isolated) = pawn_eval(board, Colour::Black);
-    let pawns = 0.5 * ((w_doubled - b_doubled) + (w_isolated - b_isolated)) as f64;
+    let pawns = 5 * ((w_doubled - b_doubled) + (w_isolated - b_isolated)) as i32;
     eval += pawns;
     eval
 }
