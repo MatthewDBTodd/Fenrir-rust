@@ -1,4 +1,5 @@
 use crate::{board::Board, attack_table::AttackTable, chess_move::Move, Colour, Piece};
+use crate::shared_perft::*;
 
 pub const CHECKMATE: i32 = 100_000;
 const WHITE_MULTIPLIER: f64 = 1.0;
@@ -13,99 +14,65 @@ pub fn search_position(
     board: &mut Board, attack_table: &AttackTable, depth: u32
 ) -> (Move, i32, u64, u64) {
 
-    let (m, e) = match board.turn_colour {
-        Colour::White => alpha_beta_max(board, attack_table, depth, i32::MIN, i32::MAX),
-        Colour::Black => alpha_beta_min(board, attack_table, depth, i32::MIN, i32::MAX),
-    };
+    let mut best_move: Move = Move::default();
+    let mut best_eval: i32 = i32::MIN;
+    let mut best_index = 0;
+    let mut move_list = [Move::default(); 256];
+    let num_moves = attack_table.generate_legal_moves(board, board.turn_colour, &mut move_list);
+    unsafe {
+        move_counter += num_moves as u64;
+    }
+    for current_depth in (1..=depth) {
+        for i in 0..num_moves {
+            board.make_move(move_list[i]);
+            let e = negamax(board, attack_table, current_depth-1, i32::MIN, i32::MAX);
+            board.undo_move();
+            if e > best_eval {
+                best_move = move_list[i];
+                best_eval = e;
+                best_index = i;
+            }
+        }
+        println!("Depth {current_depth}: {} with eval {best_eval}", move_string(&best_move));
+        for i in (1..=best_index).rev() {
+            move_list.swap(i-1, i);
+        }
+    }
     unsafe {
         let mc = move_counter;
         let pc = prune_counter;
 
         prune_counter = 0;
-        (m, e, mc, pc)
+        (best_move, best_eval, mc, pc)
     }
 }
 
-fn alpha_beta_max(
-    board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha: i32, 
-    mut beta: i32) -> (Move, i32) {
+fn negamax(board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha: i32,
+           beta: i32) -> i32 {
 
     if depth == 0 {
-        return (Move::default(), eval_position(board, attack_table));
+        return eval_position(board, attack_table);
     }
     let mut move_list = [Move::default(); 256];
     let num_moves = attack_table.generate_legal_moves(board, board.turn_colour, &mut move_list);
-    if num_moves == 0 {
-        return (Move::default(), -CHECKMATE);
-    }
     unsafe {
         move_counter += num_moves as u64;
     }
-    let mut best_eval: i32 = i32::MIN;
-    let mut best_move = Move::default();
     for i in 0..num_moves {
-        // println!("alpha beta MAX: depth {depth}. Checking {:?}", move_list[i]);
         board.make_move(move_list[i]);
-        let (_, move_eval) = alpha_beta_min(board, attack_table, depth-1, alpha, beta);
+        let eval = -negamax(board, attack_table, depth-1, -beta, -alpha,);
         board.undo_move();
-        if move_eval == CHECKMATE {
-            return (move_list[i], CHECKMATE);
-        }
-        if move_eval > best_eval {
-            best_eval = move_eval;
-            best_move = move_list[i];
-        }
-        if move_eval >= beta {
-            // println!("beta pruning");
+        if eval >= beta {
             unsafe {
                 prune_counter += 1;
             }
-            break;
+            return beta;
         }
-        alpha = alpha.max(move_eval);
-    }
-    (best_move, best_eval)
-}
-
-fn alpha_beta_min(
-    board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha: i32, 
-    mut beta: i32) -> (Move, i32) {
-
-    if depth == 0 {
-        return (Move::default(), eval_position(board, attack_table));
-    }
-    let mut move_list = [Move::default(); 256];
-    let num_moves = attack_table.generate_legal_moves(board, board.turn_colour, &mut move_list);
-    if num_moves == 0 {
-        return (Move::default(), CHECKMATE);
-    }
-    unsafe {
-        move_counter += num_moves as u64;
-    }
-    let mut best_eval: i32 = i32::MAX;
-    let mut best_move = Move::default();
-    for i in 0..num_moves {
-        // println!("alpha beta MIN: depth {depth}. Checking {:?}", move_list[i]);
-        board.make_move(move_list[i]);
-        let (_, move_eval) = alpha_beta_max(board, attack_table, depth-1, alpha, beta);
-        board.undo_move();
-        if move_eval == -CHECKMATE {
-            return (move_list[i], -CHECKMATE);
+        if eval > alpha {
+            alpha = eval;
         }
-        if move_eval < best_eval {
-            best_eval = move_eval;
-            best_move = move_list[i];
-        }
-        if move_eval <= alpha {
-            // println!("alpha pruning");
-            unsafe {
-                prune_counter += 1;
-            }
-            break;
-        }
-        beta = beta.min(move_eval);
     }
-    (best_move, best_eval)
+    alpha
 }
 
 fn eval_position(board: &Board, attack_table: &AttackTable) -> i32 {
@@ -197,3 +164,95 @@ const ISOLATED: [u64; 64] = [
     0x202020202020202, 0x505050505050505, 0xa0a0a0a0a0a0a0a, 0x1414141414141414,
     0x2828282828282828, 0x5050505050505050, 0xa0a0a0a0a0a0a0a0, 0x4040404040404040,
 ];
+
+/* 
+fn alpha_beta_max(
+    board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha: i32, 
+    mut beta: i32) -> (Move, i32) {
+
+    if depth == 0 {
+        return (Move::default(), eval_position(board, attack_table));
+    }
+    let mut move_list = [Move::default(); 256];
+    let num_moves = attack_table.generate_legal_moves(board, board.turn_colour, &mut move_list);
+    if num_moves == 0 {
+        return (Move::default(), -CHECKMATE);
+    }
+    unsafe {
+        move_counter += num_moves as u64;
+    }
+    let mut best_eval: i32 = i32::MIN;
+    let mut best_move = Move::default();
+    
+    // try best move so far first
+    let candidate_move = candidate_move.
+    if candidate_move.is_some() {
+        board.make_move(candidate_move.unwrap());
+        let (_, move_eval) = alpha_beta_min(board, attack_table, depth-1, alpha, beta, None);
+        board.undo_move();
+    }
+    for i in 0..num_moves {
+        // println!("alpha beta MAX: depth {depth}. Checking {:?}", move_list[i]);
+        board.make_move(move_list[i]);
+        let (_, move_eval) = alpha_beta_min(board, attack_table, depth-1, alpha, beta);
+        board.undo_move();
+        if move_eval == CHECKMATE {
+            return (move_list[i], CHECKMATE);
+        }
+        if move_eval > best_eval {
+            best_eval = move_eval;
+            best_move = move_list[i];
+        }
+        if move_eval >= beta {
+            // println!("beta pruning");
+            unsafe {
+                prune_counter += 1;
+            }
+            break;
+        }
+        alpha = alpha.max(move_eval);
+    }
+    (best_move, best_eval)
+}
+
+fn alpha_beta_min(
+    board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha: i32, 
+    mut beta: i32) -> (Move, i32) {
+
+    if depth == 0 {
+        return (Move::default(), eval_position(board, attack_table));
+    }
+    let mut move_list = [Move::default(); 256];
+    let num_moves = attack_table.generate_legal_moves(board, board.turn_colour, &mut move_list);
+    if num_moves == 0 {
+        return (Move::default(), CHECKMATE);
+    }
+    unsafe {
+        move_counter += num_moves as u64;
+    }
+    let mut best_eval: i32 = i32::MAX;
+    let mut best_move = Move::default();
+    for i in 0..num_moves {
+        // println!("alpha beta MIN: depth {depth}. Checking {:?}", move_list[i]);
+        board.make_move(move_list[i]);
+        let (_, move_eval) = alpha_beta_max(board, attack_table, depth-1, alpha, beta);
+        board.undo_move();
+        if move_eval == -CHECKMATE {
+            return (move_list[i], -CHECKMATE);
+        }
+        if move_eval < best_eval {
+            best_eval = move_eval;
+            best_move = move_list[i];
+        }
+        if move_eval <= alpha {
+            // println!("alpha pruning");
+            unsafe {
+                prune_counter += 1;
+            }
+            break;
+        }
+        beta = beta.min(move_eval);
+    }
+    (best_move, best_eval)
+}
+*/
