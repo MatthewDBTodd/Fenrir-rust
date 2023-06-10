@@ -2,8 +2,8 @@ use crate::{board::Board, attack_table::AttackTable, chess_move::Move, Colour, P
 use crate::shared_perft::*;
 
 pub const CHECKMATE: i32 = 100_000;
-const WHITE_MULTIPLIER: f64 = 1.0;
-const BLACK_MULTIPLIER: f64 = -1.0;
+pub const MIN_EVAL: i32 = -1_000_000_000;
+pub const MAX_EVAL: i32 = 1_000_000_000;
 
 static mut move_counter: u64 = 0;
 static mut prune_counter: u64 = 0;
@@ -15,7 +15,7 @@ pub fn search_position(
 ) -> (Move, i32, u64, u64) {
 
     let mut best_move: Move = Move::default();
-    let mut best_eval: i32 = i32::MIN;
+    let mut best_eval: i32 = i32::MIN + 1;
     let mut best_index = 0;
     let mut move_list = [Move::default(); 256];
     let num_moves = attack_table.generate_legal_moves(board, board.turn_colour, &mut move_list);
@@ -23,16 +23,27 @@ pub fn search_position(
         move_counter += num_moves as u64;
     }
     for current_depth in (1..=depth) {
+        let mut current_best_move: Move = best_move;
+        let mut current_best_eval: i32 = best_eval;
+        let mut current_best_index = 0;
+
         for i in 0..num_moves {
+            if i == current_best_index {
+                continue;
+            }
             board.make_move(move_list[i]);
-            let e = negamax(board, attack_table, current_depth-1, i32::MIN, i32::MAX);
+            let e = -negamax(board, attack_table, current_depth-1, i32::MIN + 1, -current_best_eval);
+            println!("{:?} -> {e}", move_list[i]);
             board.undo_move();
-            if e > best_eval {
-                best_move = move_list[i];
-                best_eval = e;
-                best_index = i;
+            if e > current_best_eval {
+                current_best_move = move_list[i];
+                current_best_eval = e;
+                current_best_index = i;
             }
         }
+        best_move = current_best_move;
+        best_eval = current_best_eval;
+        best_index = current_best_index;
         println!("Depth {current_depth}: {} with eval {best_eval}", move_string(&best_move));
         for i in (1..=best_index).rev() {
             move_list.swap(i-1, i);
@@ -100,9 +111,13 @@ fn eval_position(board: &Board, attack_table: &AttackTable) -> i32 {
 
     let (w_doubled, w_isolated) = pawn_eval(board, Colour::White);
     let (b_doubled, b_isolated) = pawn_eval(board, Colour::Black);
-    let pawns = 5 * ((w_doubled - b_doubled) + (w_isolated - b_isolated)) as i32;
+    // let pawns = 5 * ((w_doubled - b_doubled) + (w_isolated - b_isolated)) as i32;
+    let pawns = 5 * (w_doubled - b_doubled) as i32;
     eval += pawns;
-    eval
+    match board.turn_colour {
+        Colour::White => 1 * eval,
+        Colour::Black => -1 * eval,
+    }
 }
 
 // returns doubled and isolated pawns
