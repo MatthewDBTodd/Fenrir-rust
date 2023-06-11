@@ -46,8 +46,7 @@ pub fn search_position(
 
         unsafe {
             let bf = branching_factor(nodes_visited, current_depth);
-            let bf2 = branching_factor2(nodes_visited, prev_num_nodes);
-            println!("branching factor = {} / {}", bf, bf2);
+            println!("branching factor = {}", bf);
             prev_num_nodes = nodes_visited;
             nodes_visited = 0;
         }
@@ -310,8 +309,4 @@ fn alpha_beta_min(
 
 fn branching_factor(nodes: u64, depth: u32) -> f64 {
     (nodes as f64).powf(1.0 / depth as f64)
-}
-
-fn branching_factor2(nodes: u64, nodes_prev: u64) -> f64 {
-    nodes as f64 / nodes_prev as f64
 }
