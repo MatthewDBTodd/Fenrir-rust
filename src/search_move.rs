@@ -1,9 +1,10 @@
 use crate::{board::Board, attack_table::AttackTable, chess_move::Move, Colour, Piece};
-use crate::shared_perft::*;
+use crate::{shared_perft::*, king};
 
 pub const CHECKMATE: i32 = 100_000;
-pub const MIN_EVAL: i32 = -1_000_000_000;
-pub const MAX_EVAL: i32 = 1_000_000_000;
+pub const DRAW: i32 = 0;
+
+static mut nodes_visited: u64 = 0;
 
 // alpha-beta search. Returns best move with its eval
 pub fn search_position(
@@ -16,6 +17,8 @@ pub fn search_position(
     let mut move_list = [Move::default(); 256];
     let num_moves = attack_table.generate_legal_moves(board, board.turn_colour, &mut move_list);
     println!("checking {} moves...", num_moves);
+
+    let mut prev_num_nodes: u64 = 1;
 
     for current_depth in (1..=depth) {
         let mut current_best_move: Move = Move::default();
@@ -40,6 +43,14 @@ pub fn search_position(
         for i in (1..=current_best_index).rev() {
             move_list.swap(i-1, i);
         }
+
+        unsafe {
+            let bf = branching_factor(nodes_visited, current_depth);
+            let bf2 = branching_factor2(nodes_visited, prev_num_nodes);
+            println!("branching factor = {} / {}", bf, bf2);
+            prev_num_nodes = nodes_visited;
+            nodes_visited = 0;
+        }
     }
     (best_move, best_eval)
 }
@@ -47,11 +58,24 @@ pub fn search_position(
 fn negamax(board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha: i32,
            beta: i32) -> i32 {
 
+    unsafe {
+        nodes_visited += 1;
+    }
     if depth == 0 {
         return eval_position(board, attack_table);
     }
     let mut move_list = [Move::default(); 256];
     let num_moves = attack_table.generate_legal_moves(board, board.turn_colour, &mut move_list);
+    if num_moves == 0 {
+        if attack_table.king_in_check(board) {
+            match board.turn_colour {
+                Colour::White => return -CHECKMATE,
+                Colour::Black => return CHECKMATE,
+            }
+        } else {
+            return DRAW;
+        }
+    }
     for i in 0..num_moves {
         board.make_move(move_list[i]);
         let eval = -negamax(board, attack_table, depth-1, -beta, -alpha,);
@@ -70,22 +94,31 @@ fn eval_position(board: &Board, attack_table: &AttackTable) -> i32 {
     // let mut move_list = [Move::default(); 256];
     // let white_legal_moves = attack_table.generate_legal_moves(board, Colour::White, &mut move_list);
     // let black_legal_moves = attack_table.generate_legal_moves(board, Colour::Black, &mut move_list);
-    println!("----------------------------------------------------");
-    println!("BOARD EVAL");
-    println!("{}", board);
+    // println!("----------------------------------------------------");
+    // println!("BOARD EVAL");
+    // println!("{}", board);
     let white_rough_moves = attack_table.get_num_legal_moves(board, Colour::White);
     let black_rough_moves = attack_table.get_num_legal_moves(board, Colour::Black);
     // println!("white legal/rough = {} {}", white_legal_moves, white_rough_moves);
     // println!("black legal/rough = {} {}", black_legal_moves, black_rough_moves);
-    if board.turn_colour == Colour::White && white_rough_moves == 0 && 
-       attack_table.king_in_check(board) {
-        println!("checkmate!");
-        return -CHECKMATE;
-    } else if board.turn_colour == Colour::Black && black_rough_moves == 0 &&
-              attack_table.king_in_check(board) {
-
-        println!("checkmate!");
-        return CHECKMATE;
+    if board.turn_colour == Colour::White && white_rough_moves == 0 {
+        // hack for now, there may actually be a legal en_passant, have to check for that
+        let mut move_list = [Move::default(); 256];
+        let legal_moves = attack_table.generate_legal_moves(board, Colour::White, &mut move_list);
+        if legal_moves == 0 && attack_table.king_in_check(board) {
+            return -CHECKMATE;
+        } else if legal_moves == 0 {
+            return DRAW;
+        }
+    } else if board.turn_colour == Colour::Black && black_rough_moves == 0 {
+        // hack for now, there may actually be a legal en_passant, have to check for that
+        let mut move_list = [Move::default(); 256];
+        let legal_moves = attack_table.generate_legal_moves(board, Colour::Black, &mut move_list);
+        if legal_moves == 0 && attack_table.king_in_check(board) {
+            return CHECKMATE;
+        } else if legal_moves == 0 {
+            return DRAW;
+        }
     }
     let mut eval: i32 = 0;
     for (piece_type, weight) in [
@@ -97,28 +130,28 @@ fn eval_position(board: &Board, attack_table: &AttackTable) -> i32 {
     ] {
         let (white_count, black_count) = board.bitboard.num_pieces(piece_type);
         let val = weight * (white_count as i32 - black_count as i32);
-        println!("{:?} {} * ({} - {}) = {}", piece_type, weight, white_count, black_count, val);
+        // println!("{:?} {} * ({} - {}) = {}", piece_type, weight, white_count, black_count, val);
         eval += val;
         // eval += weight * (white_count as i32 - black_count as i32);
     }
-    println!("\nmobility:");
+    // println!("\nmobility:");
     let val = 10 * (white_rough_moves as i32 - black_rough_moves as i32);
-    println!("10 * ({} - {}) = {}", white_rough_moves, black_rough_moves, val);
+    // println!("10 * ({} - {}) = {}", white_rough_moves, black_rough_moves, val);
     eval += val;
     // eval += 10 * (white_rough_moves as i32 - black_rough_moves as i32);
 
     let (w_doubled, w_isolated) = pawn_eval(board, Colour::White);
     let (b_doubled, b_isolated) = pawn_eval(board, Colour::Black);
     // let pawns = 5 * ((w_doubled - b_doubled) + (w_isolated - b_isolated)) as i32;
-    let pawns = 5 * ((w_doubled - b_doubled) + (w_isolated - b_isolated)) as i32;
-    println!("\npawns:");
-    println!("5 * (({} - {}) + ({} - {})) = {}", w_doubled, b_doubled, w_isolated, b_isolated, pawns);
+    let pawns = 50 * ((w_doubled - b_doubled) + (w_isolated - b_isolated)) as i32;
+    // println!("\npawns:");
+    // println!("5 * (({} - {}) + ({} - {})) = {}", w_doubled, b_doubled, w_isolated, b_isolated, pawns);
     eval += pawns;
     eval = match board.turn_colour {
         Colour::White => 1 * eval,
         Colour::Black => -1 * eval,
     };
-    println!("\nFinal eval = {}", eval);
+    // println!("\nFinal eval = {}", eval);
     eval
 }
 
@@ -274,3 +307,11 @@ fn alpha_beta_min(
     (best_move, best_eval)
 }
 */
+
+fn branching_factor(nodes: u64, depth: u32) -> f64 {
+    (nodes as f64).powf(1.0 / depth as f64)
+}
+
+fn branching_factor2(nodes: u64, nodes_prev: u64) -> f64 {
+    nodes as f64 / nodes_prev as f64
+}

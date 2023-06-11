@@ -713,7 +713,7 @@ impl AttackTable {
                 MoveType::CapturePromotion(p, _) => p,
                 _ => panic!("Invalid move type"),
             };
-            let piece_values = [1.0, 200.0, 9.0, 3.0, 3.0, 5.0];
+            let piece_values = [100, 20000, 900, 330, 320, 500];
             piece_values[captured_piece as usize] - piece_values[chess_move.piece as usize]
         };
         captures.sort_by(|a, b| {
