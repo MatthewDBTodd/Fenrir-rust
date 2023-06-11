@@ -136,6 +136,114 @@ impl AttackTable {
         moves.num_moves
             
     }
+
+    // we ignore promotions and en_passant for speed, this is meant to be a rough count
+    pub fn get_num_legal_moves(&self, board: &Board, colour: Colour) -> u32 {
+        let board_status = self.get_board_status(&board.bitboard, colour);
+        let occupied = board.bitboard.get_entire_mask();
+        let friendly_pieces = board.bitboard.get_colour_mask(colour);
+        if board_status.num_checking_pieces == 2 {
+            let king_idx = board.bitboard.get_colour_piece_mask(Piece::King, colour)
+                .trailing_zeros() as usize;
+            let king_moves = self.king[king_idx] & !board_status.danger_squares &
+                !friendly_pieces;
+            // println!("double check = {}", bitmask_to_board(king_moves));
+            return king_moves.count_ones();
+        } else if board_status.num_checking_pieces == 1 {
+            let mut move_count: u32 = 0;
+            let king_idx = board.bitboard.get_colour_piece_mask(Piece::King, colour)
+                .trailing_zeros() as usize;
+            let king_moves = self.king[king_idx] & !board_status.danger_squares &
+                !friendly_pieces;
+            move_count += king_moves.count_ones();
+
+            let (_, checking_piece_mask, block_squares) = board_status.king_attacking_pieces[0];
+            let legal_squares = checking_piece_mask | block_squares;
+            for piece_type in [Piece::Pawn, Piece::Knight, Piece::Bishop, Piece::Rook, Piece::Queen] {
+                let mut all_pieces = board.bitboard.get_colour_piece_mask(piece_type, board_status.friendly_colour);
+                
+                // a pinned piece can't do anything about stopping check, remove them
+                all_pieces &= !board_status.pinned_pieces;
+
+                while all_pieces != 0 {
+                    let one_piece = all_pieces & all_pieces.wrapping_neg();
+                    all_pieces ^= one_piece;
+                    let legal_moves = self.get_single_piece_pseudo_attacks(
+                        piece_type, colour, one_piece, occupied
+                    ) & !friendly_pieces & legal_squares;
+                    move_count += legal_moves.count_ones();
+                }
+            }
+            return move_count;
+        }
+        let mut move_count: u32 = 0;
+        for piece in [Piece::Pawn, Piece::Knight, Piece::Bishop, Piece::Rook, Piece::Queen] {
+            let mut all_pieces = board.bitboard.get_colour_piece_mask(piece, colour); 
+            while all_pieces != 0 {
+                let one_piece = all_pieces & all_pieces.wrapping_neg();
+                all_pieces ^= one_piece;
+                // println!("{}", bitmask_to_board(one_piece));
+
+                let pseudo_moves = if piece == Piece::Pawn {
+                    let enemy_mask = board.bitboard.get_colour_mask(!&colour);
+                    self.get_single_piece_moves(
+                        Piece::Pawn, colour, one_piece, occupied,
+                    ) | self.get_single_piece_captures(
+                        Piece::Pawn, colour, one_piece, occupied, enemy_mask 
+                    )
+                } else {
+                    self.get_single_piece_pseudo_attacks(
+                        piece, colour, one_piece, occupied
+                    ) & !friendly_pieces
+                };
+                let legal_moves = if one_piece & board_status.pinned_pieces != 0 {
+                    pseudo_moves & board_status.pinned_pseudo_legal_squares
+                        .iter()
+                        .find(|&&(first, _)| first == one_piece)
+                        .map(|&(_, second)| second)
+                        .unwrap()
+                } else {
+                    pseudo_moves
+                };
+                // println!("{}", bitmask_to_board(legal_moves));
+                // println!("================================");
+                move_count += legal_moves.count_ones();
+            }
+        }
+        let king_idx = board.bitboard.get_colour_piece_mask(Piece::King, colour)
+            .trailing_zeros() as usize;
+        let king_moves = self.king[king_idx] & !board_status.danger_squares & 
+            !friendly_pieces;
+        // println!("king moves = {}", bitmask_to_board(king_moves));
+        move_count += king_moves.count_ones();
+
+        let (mut kingside, mut queenside) = board.castling_rights.can_castle(board_status.friendly_colour);
+        if kingside {
+            let king_travel_squares: u64 = match board_status.friendly_colour {
+                Colour::White => 0x60,
+                Colour::Black => 0x6000000000000000,
+            };
+            kingside = king_travel_squares & board.bitboard.get_entire_mask() == 0 
+                    && king_travel_squares & board_status.danger_squares == 0;
+        }
+        
+        if queenside {
+            let (in_between_squares, king_travel_squares): (u64, u64) = match board_status.friendly_colour {
+                Colour::White => (0xE, 0xC),
+                Colour::Black => (0xE00000000000000, 0xC00000000000000),
+            };
+            queenside = in_between_squares & board.bitboard.get_entire_mask() == 0
+                     && king_travel_squares & board_status.danger_squares == 0;
+        }
+        if kingside {
+            move_count += 1;
+        }
+        if queenside {
+            move_count += 1;
+        }
+        move_count
+    }
+    
     
     // For a given piece type and a bitmask of a single source square, return
     // a bitmask of all the squares that piece attacks
@@ -926,7 +1034,27 @@ impl AttackTable {
             });
         }
     }
-    
+
+    pub fn king_in_check(&self, board: &Board) -> bool {
+        let king_square = board.bitboard.get_colour_piece_mask(
+            Piece::King, board.turn_colour
+        );
+        let occupied = board.bitboard.get_entire_mask();
+        for piece in [Piece::Queen, Piece::Rook, Piece::Bishop, Piece::Knight, Piece::Pawn] {
+            let piece_mask = board.bitboard.get_colour_piece_mask(
+                piece, !&board.turn_colour,
+            );
+            let attacks_from_king_sq = self.get_single_piece_pseudo_attacks(
+                piece, board.turn_colour, king_square, occupied
+            );
+
+            if piece_mask & attacks_from_king_sq != 0 {
+                return true;
+            }
+        }
+        false
+    }
+
     /*
      * To find pinned pieces:
      * for each sliding piece, loop through each ray direction individually
@@ -1196,7 +1324,7 @@ impl AttackTable {
                         debug_assert!(pinned.is_power_of_two());
                         pinned_legal_squares[num_pinned] = (
                             pinned,
-                            ray_direction.0[piece_idx] | ray_direction.1[friendly_king_idx],
+                            ray_direction.0[piece_idx] & ray_direction.1[friendly_king_idx] | source_square,
                         );
                         num_pinned += 1;
                         break;
@@ -1796,6 +1924,12 @@ mod tests {
             board_status.king_attacking_pieces[idx.unwrap()].2,
         );
         
+        // -----------------------------------------------------------------------------------------
+        let board = Board::new(Some("8/4k3/8/8/6p1/5p2/4K3/8 w - - 0 1")).unwrap();
+        assert!(attack_table.king_in_check(&board));
+        // -----------------------------------------------------------------------------------------
+        let board = Board::new(Some("8/4k3/8/8/6p1/5p2/4K3/8 w - - 0 1")).unwrap();
+        assert!(attack_table.king_in_check(&board));
         // -----------------------------------------------------------------------------------------
         // This test is about discovered checks, which for the timebeing has been commented out
         /*
