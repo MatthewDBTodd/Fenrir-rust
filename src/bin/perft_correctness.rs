@@ -1,9 +1,6 @@
 use std::time::Instant;
 
 use clap::{Command, Arg, ArgAction};
-use fenrir::{shared_perft::*};
-use fenrir::board::Board;
-use fenrir::attack_table::AttackTable;
 use fenrir::engine::Engine;
 
 fn main() {

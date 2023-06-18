@@ -1,4 +1,3 @@
-use std::io::Write;
 use std::fmt;
 use std::rc::Rc;
 use crate::attack_table::AttackTable;

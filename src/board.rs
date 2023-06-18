@@ -18,7 +18,7 @@ pub struct Board {
     pub en_passant: Option<Square>,
     pub move_history: Vec<SavedMove>,
     pub board_hash: u64,
-    hasher: Rc<ZobristHasher>,
+    pub hasher: Rc<ZobristHasher>,
 }
 
 // ignore move_history and board_hash
@@ -58,8 +58,7 @@ impl Board {
         } else {
             1
         };
-
-        Ok(Board {
+        let mut board = Board {
             bitboard: BitBoard::try_from(parts[0])?,
             turn_colour: Colour::try_from(parts[1])?,
             castling_rights: CastlingRights::try_from(parts[2])?,
@@ -69,7 +68,10 @@ impl Board {
             move_history: Vec::new(),
             board_hash: 0,
             hasher,
-        })
+        };
+
+        board.board_hash = board.hasher.hash_board(&board);
+        Ok(board)
     }
     
     pub fn make_move(&mut self, move_: Move) {
@@ -231,12 +233,15 @@ impl Board {
         } else {
             self.move_num
         };
-        self.move_history.push(SavedMove{
+        let saved_move = SavedMove {
             move_,
             prev_castling_rights: saved_castling,
             prev_half_move_num: saved_half_move_num, 
             prev_en_passant: saved_en_passant,
-        });
+        };
+
+        self.board_hash = self.hasher.update_hash(&self, &saved_move);
+        self.move_history.push(saved_move);
     }
     
     pub fn undo_move(&mut self) {
@@ -321,6 +326,8 @@ impl Board {
         } else {
             self.move_num
         };
+
+        self.board_hash = self.hasher.update_hash(&self, &saved_move);
     }
     
     fn make_quiet_move(&mut self, colour: Colour, source_sq: Square, dest_sq: Square, piece: Piece) {
@@ -485,7 +492,6 @@ mod tests {
         );
         assert_eq!(board.en_passant, None);
         assert_eq!(board.move_history.len(), 0);
-        assert_eq!(board.board_hash, 0);
 
         assert_eq!(board.bitboard.get_entire_mask(), 0xFF_FF_00_00_00_00_FF_FF);
         assert_eq!(
@@ -587,7 +593,6 @@ mod tests {
         );
         assert_eq!(board.en_passant, None);
         assert_eq!(board.move_history.len(), 0);
-        assert_eq!(board.board_hash, 0);
     }
 
     #[test]
@@ -607,7 +612,6 @@ mod tests {
         );
         assert_eq!(board.en_passant, Some(Square::E3));
         assert_eq!(board.move_history.len(), 0);
-        assert_eq!(board.board_hash, 0);
     }
 
     #[test]
@@ -651,7 +655,6 @@ mod tests {
         );
         assert_eq!(board.en_passant, None);
         assert_eq!(board.move_history.len(), 0);
-        assert_eq!(board.board_hash, 0);
     }
 
     #[test]
