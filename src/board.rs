@@ -248,6 +248,9 @@ impl Board {
         let Some(saved_move) = self.move_history.pop() else {
             return;
         };
+
+        self.board_hash = self.hasher.update_hash(&self, &saved_move);
+        
         match saved_move.move_.move_type {
             MoveType::Quiet => {
                 self.make_quiet_move(!&self.turn_colour, saved_move.move_.dest_sq, 
@@ -317,6 +320,7 @@ impl Board {
             },
             _ => panic!("Invalid move type"),
         }
+
         self.en_passant = saved_move.prev_en_passant;
         self.half_move_num = saved_move.prev_half_move_num;
         self.castling_rights = saved_move.prev_castling_rights;
@@ -327,7 +331,6 @@ impl Board {
             self.move_num
         };
 
-        self.board_hash = self.hasher.update_hash(&self, &saved_move);
     }
     
     fn make_quiet_move(&mut self, colour: Colour, source_sq: Square, dest_sq: Square, piece: Piece) {
