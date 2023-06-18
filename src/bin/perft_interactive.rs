@@ -1,7 +1,5 @@
 use clap::{Command, Arg, ArgAction};
-use chess::{shared_perft::*};
-use chess::board::Board;
-use chess::attack_table::AttackTable;
+use fenrir::engine::Engine;
 use std::io::{self, Write};
 
 fn get_user_input() -> String {
@@ -26,34 +24,33 @@ fn main() {
         ).get_matches();
 
         let fen = cli.get_one::<String>("fen").unwrap();
-        let attack_table = AttackTable::init();
-        let mut board = Board::new(Some(fen)).unwrap();
+        let mut engine = Engine::new(Some(fen));
 
         loop {
-            println!("{board}");
+            println!("{engine}");
             let input = get_user_input();
             if input == "quit" {
                 break;
             } else if input == "undo" {
-                board.undo_move();
+                engine.undo_move();
             } else if input.starts_with("gen") {
                 let parts: Vec<&str> = input.split_whitespace().collect();
                 assert!(parts.len() == 2);
                 let depth = parts[1].parse::<u32>();
                 if depth.is_ok() {
-                    let nodes = perft_debug(&mut board, &attack_table, depth.unwrap(), false);
+                    let nodes = engine.perft_debug(depth.unwrap(), false);
                     println!("{nodes} nodes");
                 } else {
                     println!("invalid input");
                     continue;
                 }
             } else {
-                let chess_move = match string_to_move(&input, &board) {
+                let chess_move = match engine.string_to_move(&input) {
                     Ok(m) => m,
                     Err(e) => panic!("{}", e),
                 };
                 println!("{} -> {:?}", input, chess_move);
-                board.make_move(chess_move);
+                engine.make_move(chess_move);
             }
         }
 }

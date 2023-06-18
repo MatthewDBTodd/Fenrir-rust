@@ -1,9 +1,10 @@
 use std::time::Instant;
 
 use clap::{Command, Arg, ArgAction};
-use chess::{shared_perft::*};
-use chess::board::Board;
-use chess::attack_table::AttackTable;
+use fenrir::{shared_perft::*};
+use fenrir::board::Board;
+use fenrir::attack_table::AttackTable;
+use fenrir::engine::Engine;
 
 fn main() {
     let cli = Command::new("perft")
@@ -64,26 +65,25 @@ fn main() {
         if verbose {
             println!("depth = {depth}, fen = {fen}, verbose = {verbose}, moves = {:?}", moves);
         }
-        let attack_table = AttackTable::init();
-        let mut board = Board::new(Some(fen)).unwrap();
+        let mut engine = Engine::new(Some(fen));
         if verbose {
-            println!("Starting position:\n{}", board);
+            println!("Starting position:\n{engine}");
         }
         for chess_move in moves {
-            let translated_move = match string_to_move(&chess_move, &board) {
+            let translated_move = match engine.string_to_move(&chess_move) {
                 Ok(m) => m,
                 Err(e) => panic!("{}", e),
             };
             if verbose {
                 println!("{} -> {:?}", chess_move, translated_move);
             }
-            board.make_move(translated_move);
+            engine.make_move(translated_move);
         }
         if verbose {
-            println!("{}", board);
+            println!("{engine}");
         }
         let start = Instant::now();
-        let nodes = perft_debug(&mut board, &attack_table, depth, verbose);
+        let nodes = engine.perft_debug(depth, verbose);
         let duration = start.elapsed().as_secs_f64();
         let nodes_per_sec = (nodes as f64 / duration).round() as u64;
         println!("\n{nodes}");

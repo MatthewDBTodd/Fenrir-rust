@@ -2,9 +2,9 @@ use std::time::Instant;
 
 use criterion::{criterion_group, criterion_main, Criterion, BatchSize};
 
-use chess::attack_table::AttackTable;
-use chess::board::Board;
-use chess::shared_perft::*;
+use fenrir::attack_table::AttackTable;
+use fenrir::board::Board;
+use fenrir::shared_perft::*;
 
 
 const TEST_CASES: &[(&str, u32, usize)] = &[

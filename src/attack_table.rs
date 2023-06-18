@@ -413,6 +413,25 @@ impl AttackTable {
     fn get_en_passant_moves(&self, ep_square: Square, board: &Board, moves: &mut MoveList, board_status: &BoardStatus) {
         let occupied = board.bitboard.get_entire_mask();
         let ep_square_mask = 1 << ep_square as u32;
+        let ep_target_pawn_sq = match ep_square {
+            Square::A3 => Square::A4,
+            Square::B3 => Square::B4,
+            Square::C3 => Square::C4,
+            Square::D3 => Square::D4,
+            Square::E3 => Square::E4,
+            Square::F3 => Square::F4,
+            Square::G3 => Square::G4,
+            Square::H3 => Square::H4,
+            Square::A6 => Square::A5,
+            Square::B6 => Square::B5,
+            Square::C6 => Square::C5,
+            Square::D6 => Square::D5,
+            Square::E6 => Square::E5,
+            Square::F6 => Square::F5,
+            Square::G6 => Square::G5,
+            Square::H6 => Square::H5,
+            _ => panic!("invalid en passant square"),
+        };
         // as we only want the intersection with pawns we make the last argument just the pawn mask
         let mut ep_captures = self.get_single_piece_captures(
             Piece::Pawn,
@@ -454,32 +473,14 @@ impl AttackTable {
                     source_sq: FromPrimitive::from_u32(ep_capture.trailing_zeros()).unwrap(),
                     dest_sq: ep_square,
                     piece: Piece::Pawn,
-                    move_type: MoveType::EnPassant,
+                    move_type: MoveType::EnPassant(ep_target_pawn_sq),
                 });                        
             } else {
                 // now check for illegality if both pawns are pinned
                 if needs_extra_legality_check {
                     // get the mask of the two pawns involved and remove from occupied, then see if 
                     // that mask results in check
-                    let ep_target_pawn_mask = match ep_square {
-                        Square::A3 => 1 << Square::A4 as u32,
-                        Square::B3 => 1 << Square::B4 as u32,
-                        Square::C3 => 1 << Square::C4 as u32,
-                        Square::D3 => 1 << Square::D4 as u32,
-                        Square::E3 => 1 << Square::E4 as u32,
-                        Square::F3 => 1 << Square::F4 as u32,
-                        Square::G3 => 1 << Square::G4 as u32,
-                        Square::H3 => 1 << Square::H4 as u32,
-                        Square::A6 => 1 << Square::A5 as u32,
-                        Square::B6 => 1 << Square::B5 as u32,
-                        Square::C6 => 1 << Square::C5 as u32,
-                        Square::D6 => 1 << Square::D5 as u32,
-                        Square::E6 => 1 << Square::E5 as u32,
-                        Square::F6 => 1 << Square::F5 as u32,
-                        Square::G6 => 1 << Square::G5 as u32,
-                        Square::H6 => 1 << Square::H5 as u32,
-                        _ => panic!("invalid en passant square"),
-                    };
+                    let ep_target_pawn_mask = 1 << ep_target_pawn_sq as u32;
                     // println!("occupied = {}", bitmask_to_board(occupied));
                     let occupied_tmp = occupied & !(ep_capture | ep_target_pawn_mask);
                     // println!("occupied_tmp = {}", bitmask_to_board(occupied_tmp));
@@ -520,7 +521,7 @@ impl AttackTable {
                     source_sq: FromPrimitive::from_u32(ep_capture.trailing_zeros()).unwrap(),
                     dest_sq: ep_square,
                     piece: Piece::Pawn,
-                    move_type: MoveType::EnPassant,
+                    move_type: MoveType::EnPassant(ep_target_pawn_sq),
                 });                        
             }
         }
@@ -906,7 +907,7 @@ impl AttackTable {
                             source_sq: FromPrimitive::from_u32(ep_capture.trailing_zeros()).unwrap(),
                             dest_sq: ep_square,
                             piece: Piece::Pawn,
-                            move_type: MoveType::EnPassant,
+                            move_type: MoveType::EnPassant(double_push_pawn),
                         });
                     }
                 }
@@ -1661,9 +1662,10 @@ const NORTH_WEST: [u64; 64] = [
 
 #[cfg(test)]
 mod tests {
-    use crate::test_helpers::*;
+    use crate::{test_helpers::*, board_hash::ZobristHasher};
     use super::*;
     use crate::Square;
+    use std::rc::Rc;
     
     macro_rules! test_all_pinned_piece_legal_moves {
         ($test_description:expr,
@@ -1925,10 +1927,11 @@ mod tests {
         );
         
         // -----------------------------------------------------------------------------------------
-        let board = Board::new(Some("8/4k3/8/8/6p1/5p2/4K3/8 w - - 0 1")).unwrap();
+        let hasher = Rc::new(ZobristHasher::new());
+        let board = Board::new(Some("8/4k3/8/8/6p1/5p2/4K3/8 w - - 0 1"), hasher.clone()).unwrap();
         assert!(attack_table.king_in_check(&board));
         // -----------------------------------------------------------------------------------------
-        let board = Board::new(Some("8/4k3/8/8/6p1/5p2/4K3/8 w - - 0 1")).unwrap();
+        let board = Board::new(Some("8/4k3/8/8/6p1/5p2/4K3/8 w - - 0 1"), hasher.clone()).unwrap();
         assert!(attack_table.king_in_check(&board));
         // -----------------------------------------------------------------------------------------
         // This test is about discovered checks, which for the timebeing has been commented out

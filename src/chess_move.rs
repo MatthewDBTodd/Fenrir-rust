@@ -25,7 +25,8 @@ pub enum MoveType {
     Quiet,
     Capture(Piece), // done
     DoublePawnPush,
-    EnPassant, // done
+    // the square the captured pawn is
+    EnPassant(Square), // done
     CastleKingSide, // done
     CastleQueenSide, // done
     MovePromotion(Piece),

@@ -99,17 +99,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
-name = "chess"
-version = "0.1.0"
-dependencies = [
- "clap 4.3.0",
- "criterion",
- "num-derive",
- "num-traits",
- "rand",
-]
-
-[[package]]
 name = "clap"
 version = "2.34.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -293,6 +282,17 @@ checksum = "aa68f1b12764fab894d2755d2518754e71b4fd80ecfb822714a1206c2aab39bf"
 dependencies = [
  "cc",
  "libc",
+]
+
+[[package]]
+name = "fenrir"
+version = "0.1.0"
+dependencies = [
+ "clap 4.3.0",
+ "criterion",
+ "num-derive",
+ "num-traits",
+ "rand",
 ]
 
 [[package]]

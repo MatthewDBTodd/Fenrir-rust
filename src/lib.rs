@@ -12,6 +12,7 @@ pub mod chess_move;
 pub mod shared_perft;
 pub mod search_move;
 pub mod board_hash;
+pub mod engine;
 
 // #[cfg(test)]
 pub mod test_helpers;

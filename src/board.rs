@@ -1,4 +1,6 @@
+use std::rc::Rc;
 use crate::bitboard::*;
+use crate::board_hash::ZobristHasher;
 use crate::{Colour, Square, Piece};
 use crate::chess_move::{Move, SavedMove, MoveType};
 
@@ -16,6 +18,7 @@ pub struct Board {
     pub en_passant: Option<Square>,
     pub move_history: Vec<SavedMove>,
     pub board_hash: u64,
+    hasher: Rc<ZobristHasher>,
 }
 
 // ignore move_history and board_hash
@@ -32,7 +35,7 @@ impl PartialEq for Board {
 const STARTING_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 impl Board {
-    pub fn new(fen: Option<&str>) -> Result<Board, &'static str> {
+    pub fn new(fen: Option<&str>, hasher: Rc<ZobristHasher>) -> Result<Board, &'static str> {
         let fen = fen.unwrap_or(STARTING_FEN);
         let parts: Vec<&str> = fen.split_ascii_whitespace().collect();
         if parts.len() < 4 {
@@ -65,6 +68,7 @@ impl Board {
             move_num,
             move_history: Vec::new(),
             board_hash: 0,
+            hasher,
         })
     }
     
@@ -110,28 +114,9 @@ impl Board {
                 };
                 self.half_move_num = 0;
             },
-            MoveType::EnPassant => {
+            MoveType::EnPassant(captured_pawn_square) => {
                 debug_assert!(self.en_passant.is_some());
                 debug_assert!(self.en_passant.unwrap() == move_.dest_sq);
-                let captured_pawn_square = match self.en_passant.unwrap() {
-                    Square::A3 => Square::A4,
-                    Square::B3 => Square::B4,
-                    Square::C3 => Square::C4,
-                    Square::D3 => Square::D4,
-                    Square::E3 => Square::E4,
-                    Square::F3 => Square::F4,
-                    Square::G3 => Square::G4,
-                    Square::H3 => Square::H4,
-                    Square::A6 => Square::A5,
-                    Square::B6 => Square::B5,
-                    Square::C6 => Square::C5,
-                    Square::D6 => Square::D5,
-                    Square::E6 => Square::E5,
-                    Square::F6 => Square::F5,
-                    Square::G6 => Square::G5,
-                    Square::H6 => Square::H5,
-                    _ => panic!("Invalid en passant square"),
-                };
                 self.bitboard.remove_piece(!&self.turn_colour, Piece::Pawn, captured_pawn_square);
                 self.make_quiet_move(self.turn_colour, move_.source_sq, move_.dest_sq, move_.piece);
                 self.en_passant = None;
@@ -141,6 +126,9 @@ impl Board {
                 debug_assert!(move_.piece == Piece::King);
 
                 self.make_quiet_move(self.turn_colour, move_.source_sq, move_.dest_sq, move_.piece);
+                // TODO: make this based on the source/dest square instead of the turn colour,
+                // as this is error prone and may break on refactoring, as it depends when we 
+                // flip the turn colour
                 let rook_source_sq = if self.turn_colour == Colour::White {
                     Square::H1
                 } else {
@@ -169,6 +157,9 @@ impl Board {
                             || self.turn_colour == Colour::Black && move_.dest_sq == Square::C8);
 
                 self.make_quiet_move(self.turn_colour, move_.source_sq, move_.dest_sq, move_.piece);
+                // TODO: make this based on the source/dest square instead of the turn colour,
+                // as this is error prone and may break on refactoring, as it depends when we 
+                // flip the turn colour
                 let rook_source_sq = if self.turn_colour == Colour::White {
                     Square::A1
                 } else {
@@ -266,35 +257,19 @@ impl Board {
                 self.make_quiet_move(!&self.turn_colour, saved_move.move_.dest_sq,
                     saved_move.move_.source_sq, saved_move.move_.piece);
             },
-            MoveType::EnPassant => {
+            MoveType::EnPassant(captured_pawn_square) => {
                 self.make_quiet_move(!&self.turn_colour, saved_move.move_.dest_sq,
                     saved_move.move_.source_sq, saved_move.move_.piece);
 
-                let captured_pawn_square = match saved_move.prev_en_passant.unwrap() {
-                    Square::A3 => Square::A4,
-                    Square::B3 => Square::B4,
-                    Square::C3 => Square::C4,
-                    Square::D3 => Square::D4,
-                    Square::E3 => Square::E4,
-                    Square::F3 => Square::F4,
-                    Square::G3 => Square::G4,
-                    Square::H3 => Square::H4,
-                    Square::A6 => Square::A5,
-                    Square::B6 => Square::B5,
-                    Square::C6 => Square::C5,
-                    Square::D6 => Square::D5,
-                    Square::E6 => Square::E5,
-                    Square::F6 => Square::F5,
-                    Square::G6 => Square::G5,
-                    Square::H6 => Square::H5,
-                    _ => panic!("Invalid en passant square"),
-                };
                 self.bitboard.place_piece(self.turn_colour, Piece::Pawn, captured_pawn_square);
             },
             MoveType::CastleKingSide => {
                 self.make_quiet_move(!&self.turn_colour, saved_move.move_.dest_sq,
                     saved_move.move_.source_sq, saved_move.move_.piece);
                 // As the turn_colour is now the opposite colour the source/dest squares are flipped
+                // TODO: make this based on the source/dest square instead of the turn colour,
+                // as this is error prone and may break on refactoring, as it depends when we 
+                // flip the turn colour
                 let rook_source_sq = if self.turn_colour == Colour::White {
                     Square::F8
                 } else {
@@ -311,6 +286,9 @@ impl Board {
                 self.make_quiet_move(!&self.turn_colour, saved_move.move_.dest_sq,
                     saved_move.move_.source_sq, saved_move.move_.piece);
                 // As the turn_colour is now the opposite colour the source/dest squares are flipped
+                // TODO: make this based on the source/dest square instead of the turn colour,
+                // as this is error prone and may break on refactoring, as it depends when we 
+                // flip the turn colour
                 let rook_source_sq = if self.turn_colour == Colour::White {
                     Square::D8
                 } else {
@@ -351,20 +329,20 @@ impl Board {
     }
 }
 
-impl Default for Board {
-    fn default() -> Self {
-        Board {
-            bitboard: BitBoard::default(),
-            turn_colour: Colour::White,
-            move_num: 0,
-            half_move_num: 0,
-            castling_rights: CastlingRights::default(),
-            en_passant: None,
-            move_history: Vec::new(),
-            board_hash: 0,
-        }
-    }
-}
+// impl Default for Board {
+//     fn default() -> Self {
+//         Board {
+//             bitboard: BitBoard::default(),
+//             turn_colour: Colour::White,
+//             move_num: 0,
+//             half_move_num: 0,
+//             castling_rights: CastlingRights::default(),
+//             en_passant: None,
+//             move_history: Vec::new(),
+//             board_hash: 0,
+//         }
+//     }
+// }
 
 pub enum CastlingSide {
     WhiteKingside,
@@ -408,6 +386,15 @@ impl CastlingRights {
                  self.mask & 1u8 << CastlingSide::BlackQueenside as u32 != 0)
             }
         }
+    }
+
+    pub fn all_castling_rights(&self) -> (bool, bool, bool, bool) {
+        (
+            self.mask & 1u8 << CastlingSide::WhiteKingside as u32 != 0,
+            self.mask & 1u8 << CastlingSide::WhiteQueenside as u32 != 0,
+            self.mask & 1u8 << CastlingSide::BlackKingside as u32 != 0,
+            self.mask & 1u8 << CastlingSide::BlackQueenside as u32 != 0,
+        )
     }
 }
 
@@ -479,11 +466,13 @@ impl fmt::Display for Board {
 mod tests {
     use super::*;
     use crate::Piece;
+    use crate::board_hash::ZobristHasher;
 
     #[test]
     fn test_fen_initial_position() {
         let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-        let board = Board::new(Some(fen)).unwrap();
+        let hasher = Rc::new(ZobristHasher::new());
+        let board = Board::new(Some(fen), hasher.clone()).unwrap();
 
         assert_eq!(board.turn_colour, Colour::White);
         assert_eq!(board.move_num, 1);
@@ -584,7 +573,8 @@ mod tests {
     #[test]
     fn test_fen_custom_position() {
         let fen = "8/8/8/3k4/8/8/4K3/8 w - - 0 1";
-        let board = Board::new(Some(fen)).unwrap();
+        let hasher = Rc::new(ZobristHasher::new());
+        let board = Board::new(Some(fen), hasher.clone()).unwrap();
 
         assert_eq!(board.turn_colour, Colour::White);
         assert_eq!(board.move_num, 1);
@@ -603,7 +593,8 @@ mod tests {
     #[test]
     fn test_fen_en_passant() {
         let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq e3 0 1";
-        let board = Board::new(Some(fen)).unwrap();
+        let hasher = Rc::new(ZobristHasher::new());
+        let board = Board::new(Some(fen), hasher.clone()).unwrap();
 
         assert_eq!(board.turn_colour, Colour::Black);
         assert_eq!(board.move_num, 1);
@@ -621,30 +612,33 @@ mod tests {
 
     #[test]
     fn test_fen_invalid() {
+        let hasher = Rc::new(ZobristHasher::new());
+
         let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
-        let result = Board::new(Some(fen));
-        assert!(result.is_err());
+        let board = Board::new(Some(fen), hasher.clone());
+        assert!(board.is_err());
 
         // too many ranks
         let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR/8 w KQkq - 0 1";
-        let result = Board::new(Some(fen));
-        assert!(result.is_err());
+        let board = Board::new(Some(fen), hasher.clone());
+        assert!(board.is_err());
 
         // invalid piece character
         let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNxQKBNR w KQkq - 0 1";
-        let result = Board::new(Some(fen));
-        assert!(result.is_err());
+        let board = Board::new(Some(fen), hasher.clone());
+        assert!(board.is_err());
 
         // too many white pawns
         let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPPP/RNBQKBNR w KQkq - 0 1";
-        let result = Board::new(Some(fen));
-        assert!(result.is_err());
+        let board = Board::new(Some(fen), hasher.clone());
+        assert!(board.is_err());
     }
 
     #[test]
     fn test_fen_partial_castling_rights() {
         let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQk - 0 1";
-        let board = Board::new(Some(fen)).unwrap();
+        let hasher = Rc::new(ZobristHasher::new());
+        let board = Board::new(Some(fen), hasher.clone()).unwrap();
 
         assert_eq!(board.turn_colour, Colour::White);
         assert_eq!(board.move_num, 1);
@@ -662,10 +656,11 @@ mod tests {
 
     #[test]
     fn test_quiet_move() {
+        let hasher = Rc::new(ZobristHasher::new());
         let expected_fen = "rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 1 1";
-        let expected_board = Board::new(Some(expected_fen)).unwrap();
+        let expected_board = Board::new(Some(expected_fen), hasher.clone()).unwrap();
 
-        let mut actual_board = Board::new(None).unwrap();
+        let mut actual_board = Board::new(None, hasher.clone()).unwrap();
 
         actual_board.make_move(Move {
             source_sq: Square::G1,
@@ -676,7 +671,7 @@ mod tests {
         assert_eq!(expected_board, actual_board);
 
         let expected_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-        let expected_board = Board::new(Some(expected_fen)).unwrap();
+        let expected_board = Board::new(Some(expected_fen), hasher.clone()).unwrap();
 
         actual_board.undo_move();
         assert_eq!(expected_board, actual_board);
@@ -684,11 +679,12 @@ mod tests {
 
     #[test]
     fn test_capture() {
+        let hasher = Rc::new(ZobristHasher::new());
         let expected_fen = "rnbqkb1r/ppp1pppp/5n2/8/2BP4/4P3/PP3PPP/RNBQK1NR b KQkq - 0 4";
-        let expected_board = Board::new(Some(expected_fen)).unwrap();
+        let expected_board = Board::new(Some(expected_fen), hasher.clone()).unwrap();
 
         let starting_fen = "rnbqkb1r/ppp1pppp/5n2/8/2pP4/4P3/PP3PPP/RNBQKBNR w KQkq - 1 4";
-        let mut actual_board = Board::new(Some(starting_fen)).unwrap();
+        let mut actual_board = Board::new(Some(starting_fen), hasher.clone()).unwrap();
 
         actual_board.make_move(Move {
             source_sq: Square::F1,
@@ -698,7 +694,7 @@ mod tests {
         });
         assert_eq!(expected_board, actual_board);
 
-        let expected_board = Board::new(Some(starting_fen)).unwrap();
+        let expected_board = Board::new(Some(starting_fen), hasher.clone()).unwrap();
         
         actual_board.undo_move();
         assert_eq!(expected_board, actual_board);
@@ -706,11 +702,12 @@ mod tests {
     
     #[test]
     fn test_double_pawn_push() {
+        let hasher = Rc::new(ZobristHasher::new());
         let expected_fen = "rnbqkbnr/pp1ppppp/8/8/2pP1P2/4P3/PPP3PP/RNBQKBNR b KQkq d3 0 3";
-        let expected_board = Board::new(Some(expected_fen)).unwrap();
+        let expected_board = Board::new(Some(expected_fen), hasher.clone()).unwrap();
 
         let starting_fen = "rnbqkbnr/pp1ppppp/8/8/2p2P2/4P3/PPPP2PP/RNBQKBNR w KQkq - 0 3";
-        let mut actual_board = Board::new(Some(starting_fen)).unwrap();
+        let mut actual_board = Board::new(Some(starting_fen), hasher.clone()).unwrap();
 
         actual_board.make_move(Move {
             source_sq: Square::D2,
@@ -721,7 +718,7 @@ mod tests {
 
         assert_eq!(expected_board, actual_board);
 
-        let expected_board = Board::new(Some(starting_fen)).unwrap();
+        let expected_board = Board::new(Some(starting_fen), hasher.clone()).unwrap();
         
         actual_board.undo_move();
         assert_eq!(expected_board, actual_board);
@@ -729,22 +726,23 @@ mod tests {
 
     #[test]
     fn test_en_passant() {
+        let hasher = Rc::new(ZobristHasher::new());
         let expected_fen = "rnbqkbnr/p1p1pppp/1p1P4/8/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 3";
-        let expected_board = Board::new(Some(expected_fen)).unwrap();
+        let expected_board = Board::new(Some(expected_fen), hasher.clone()).unwrap();
 
         let starting_fen = "rnbqkbnr/p1p1pppp/1p6/3pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 3";
-        let mut actual_board = Board::new(Some(starting_fen)).unwrap();
+        let mut actual_board = Board::new(Some(starting_fen), hasher.clone()).unwrap();
 
         actual_board.make_move(Move {
             source_sq: Square::E5,
             dest_sq: Square::D6,
             piece: Piece::Pawn,
-            move_type: MoveType::EnPassant,
+            move_type: MoveType::EnPassant(Square::D5),
         });
 
         assert_eq!(expected_board, actual_board);
 
-        let expected_board = Board::new(Some(starting_fen)).unwrap();
+        let expected_board = Board::new(Some(starting_fen), hasher.clone()).unwrap();
         
         actual_board.undo_move();
         assert_eq!(expected_board, actual_board);
@@ -752,11 +750,12 @@ mod tests {
 
     #[test]
     fn test_castle_kingside_white() {
+        let hasher = Rc::new(ZobristHasher::new());
         let expected_fen = "r1bqkb1r/pppp1ppp/2n2n2/1B2p3/4P3/5N2/PPPP1PPP/RNBQ1RK1 b kq - 5 4";
-        let expected_board = Board::new(Some(expected_fen)).unwrap();
+        let expected_board = Board::new(Some(expected_fen), hasher.clone()).unwrap();
 
         let starting_fen = "r1bqkb1r/pppp1ppp/2n2n2/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4";
-        let mut actual_board = Board::new(Some(starting_fen)).unwrap();
+        let mut actual_board = Board::new(Some(starting_fen), hasher.clone()).unwrap();
 
         actual_board.make_move(Move {
             source_sq: Square::E1,
@@ -767,7 +766,7 @@ mod tests {
 
         assert_eq!(expected_board, actual_board);
 
-        let expected_board = Board::new(Some(starting_fen)).unwrap();
+        let expected_board = Board::new(Some(starting_fen), hasher.clone()).unwrap();
         
         actual_board.undo_move();
         assert_eq!(expected_board, actual_board);
@@ -775,11 +774,12 @@ mod tests {
 
     #[test]
     fn test_castle_kingside_black() {
+        let hasher = Rc::new(ZobristHasher::new());
         let expected_fen = "r1bq1rk1/pppp1ppp/2n2n2/1Bb1p3/4P3/3P1N2/PPP2PPP/RNBQ1RK1 w - - 1 6";
-        let expected_board = Board::new(Some(expected_fen)).unwrap();
+        let expected_board = Board::new(Some(expected_fen), hasher.clone()).unwrap();
 
         let starting_fen = "r1bqk2r/pppp1ppp/2n2n2/1Bb1p3/4P3/3P1N2/PPP2PPP/RNBQ1RK1 b kq - 0 5";
-        let mut actual_board = Board::new(Some(starting_fen)).unwrap();
+        let mut actual_board = Board::new(Some(starting_fen), hasher.clone()).unwrap();
 
         actual_board.make_move(Move {
             source_sq: Square::E8,
@@ -790,7 +790,7 @@ mod tests {
 
         assert_eq!(expected_board, actual_board);
 
-        let expected_board = Board::new(Some(starting_fen)).unwrap();
+        let expected_board = Board::new(Some(starting_fen), hasher.clone()).unwrap();
         
         actual_board.undo_move();
         assert_eq!(expected_board, actual_board);
@@ -798,11 +798,12 @@ mod tests {
 
     #[test]
     fn test_castle_queenside_white() {
+        let hasher = Rc::new(ZobristHasher::new());
         let expected_fen = "r3kbnr/pppqpppp/2n5/3p1b2/3P1B2/2N5/PPPQPPPP/2KR1BNR b kq - 7 5";
-        let expected_board = Board::new(Some(expected_fen)).unwrap();
+        let expected_board = Board::new(Some(expected_fen), hasher.clone()).unwrap();
 
         let starting_fen = "r3kbnr/pppqpppp/2n5/3p1b2/3P1B2/2N5/PPPQPPPP/R3KBNR w KQkq - 6 5";
-        let mut actual_board = Board::new(Some(starting_fen)).unwrap();
+        let mut actual_board = Board::new(Some(starting_fen), hasher.clone()).unwrap();
 
         actual_board.make_move(Move {
             source_sq: Square::E1,
@@ -813,7 +814,7 @@ mod tests {
 
         assert_eq!(expected_board, actual_board);
 
-        let expected_board = Board::new(Some(starting_fen)).unwrap();
+        let expected_board = Board::new(Some(starting_fen), hasher.clone()).unwrap();
         
         actual_board.undo_move();
         assert_eq!(expected_board, actual_board);
@@ -821,11 +822,12 @@ mod tests {
 
     #[test]
     fn test_castle_queenside_black() {
+        let hasher = Rc::new(ZobristHasher::new());
         let expected_fen = "2kr1bnr/pppqpppp/2n5/3p1b2/3P1B2/2N5/PPPQPPPP/2KR1BNR w - - 8 6";
-        let expected_board = Board::new(Some(expected_fen)).unwrap();
+        let expected_board = Board::new(Some(expected_fen), hasher.clone()).unwrap();
 
         let starting_fen = "r3kbnr/pppqpppp/2n5/3p1b2/3P1B2/2N5/PPPQPPPP/2KR1BNR b kq - 7 5";
-        let mut actual_board = Board::new(Some(starting_fen)).unwrap();
+        let mut actual_board = Board::new(Some(starting_fen), hasher.clone()).unwrap();
 
         actual_board.make_move(Move {
             source_sq: Square::E8,
@@ -836,7 +838,7 @@ mod tests {
 
         assert_eq!(expected_board, actual_board);
 
-        let expected_board = Board::new(Some(starting_fen)).unwrap();
+        let expected_board = Board::new(Some(starting_fen), hasher.clone()).unwrap();
         
         actual_board.undo_move();
         assert_eq!(expected_board, actual_board);
@@ -844,11 +846,12 @@ mod tests {
 
     #[test]
     fn test_move_promotion() {
+        let hasher = Rc::new(ZobristHasher::new());
         let expected_fen = "r1bqkbQr/ppppp2p/2n2n2/8/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 5";
-        let expected_board = Board::new(Some(expected_fen)).unwrap();
+        let expected_board = Board::new(Some(expected_fen), hasher.clone()).unwrap();
 
         let starting_fen = "r1bqkb1r/ppppp1Pp/2n2n2/8/8/8/PPPP1PPP/RNBQKBNR w KQkq - 1 5";
-        let mut actual_board = Board::new(Some(starting_fen)).unwrap();
+        let mut actual_board = Board::new(Some(starting_fen), hasher.clone()).unwrap();
 
         actual_board.make_move(Move {
             source_sq: Square::G7,
@@ -859,7 +862,7 @@ mod tests {
 
         assert_eq!(expected_board, actual_board);
 
-        let expected_board = Board::new(Some(starting_fen)).unwrap();
+        let expected_board = Board::new(Some(starting_fen), hasher.clone()).unwrap();
         
         actual_board.undo_move();
         assert_eq!(expected_board, actual_board);
@@ -867,11 +870,12 @@ mod tests {
 
     #[test]
     fn test_capture_promotion() {
+        let hasher = Rc::new(ZobristHasher::new());
         let expected_fen = "rnbqkbnr/pppp1ppp/8/8/8/2N1PN2/P4PPP/r1BQKB1R w Kkq - 0 6";
-        let expected_board = Board::new(Some(expected_fen)).unwrap();
+        let expected_board = Board::new(Some(expected_fen), hasher.clone()).unwrap();
 
         let starting_fen = "rnbqkbnr/pppp1ppp/8/8/8/2N1PN2/Pp3PPP/R1BQKB1R b KQkq - 1 5";
-        let mut actual_board = Board::new(Some(starting_fen)).unwrap();
+        let mut actual_board = Board::new(Some(starting_fen), hasher.clone()).unwrap();
 
         actual_board.make_move(Move {
             source_sq: Square::B2,
@@ -882,7 +886,7 @@ mod tests {
 
         assert_eq!(expected_board, actual_board);
 
-        let expected_board = Board::new(Some(starting_fen)).unwrap();
+        let expected_board = Board::new(Some(starting_fen), hasher.clone()).unwrap();
         
         actual_board.undo_move();
         assert_eq!(expected_board, actual_board);
