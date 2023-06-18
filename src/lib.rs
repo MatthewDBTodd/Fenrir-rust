@@ -13,6 +13,7 @@ pub mod shared_perft;
 pub mod search_move;
 pub mod board_hash;
 pub mod engine;
+pub mod transposition_table;
 
 // #[cfg(test)]
 pub mod test_helpers;

@@ -339,21 +339,6 @@ impl Board {
     }
 }
 
-// impl Default for Board {
-//     fn default() -> Self {
-//         Board {
-//             bitboard: BitBoard::default(),
-//             turn_colour: Colour::White,
-//             move_num: 0,
-//             half_move_num: 0,
-//             castling_rights: CastlingRights::default(),
-//             en_passant: None,
-//             move_history: Vec::new(),
-//             board_hash: 0,
-//         }
-//     }
-// }
-
 pub enum CastlingSide {
     WhiteKingside,
     WhiteQueenside,

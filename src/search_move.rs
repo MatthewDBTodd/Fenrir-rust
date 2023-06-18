@@ -1,5 +1,7 @@
+use crate::transposition_table::{TranspositionTable, EntryMatch, ResultFlag};
 use crate::{board::Board, attack_table::AttackTable, chess_move::Move, Colour, Piece};
 use crate::{shared_perft::*, king};
+use std::cmp;
 
 pub const CHECKMATE: i32 = 100_000;
 pub const DRAW: i32 = 0;
@@ -8,7 +10,7 @@ static mut nodes_visited: u64 = 0;
 
 // alpha-beta search. Returns best move with its eval
 pub fn search_position(
-    board: &mut Board, attack_table: &AttackTable, depth: u32
+    board: &mut Board, attack_table: &AttackTable, depth: u32, tt: &mut TranspositionTable,
 ) -> (Move, i32) {
 
     let mut best_move: Move = Move::default();
@@ -18,7 +20,10 @@ pub fn search_position(
     let num_moves = attack_table.generate_legal_moves(board, board.turn_colour, &mut move_list);
     println!("checking {} moves...", num_moves);
 
-    let mut prev_num_nodes: u64 = 1;
+    // let mut prev_num_nodes: u64 = 1;
+
+    let mut alpha: i32 = i32::MIN + 1;
+    let mut beta: i32 = i32::MAX;
 
     for current_depth in (1..=depth) {
         let mut current_best_move: Move = Move::default();
@@ -27,7 +32,7 @@ pub fn search_position(
 
         for i in 0..num_moves {
             board.make_move(move_list[i]);
-            let e = -negamax(board, attack_table, current_depth-1, i32::MIN + 1, -current_best_eval);
+            let e = -negamax(board, attack_table, current_depth-1, i32::MIN + 1, -current_best_eval, tt);
             println!("{:?} -> {e}", move_list[i]);
             board.undo_move();
             if e > current_best_eval {
@@ -47,7 +52,7 @@ pub fn search_position(
         unsafe {
             let bf = branching_factor(nodes_visited, current_depth);
             println!("branching factor = {}", bf);
-            prev_num_nodes = nodes_visited;
+            // prev_num_nodes = nodes_visited;
             nodes_visited = 0;
         }
     }
@@ -55,10 +60,38 @@ pub fn search_position(
 }
 
 fn negamax(board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha: i32,
-           beta: i32) -> i32 {
+           mut beta: i32, tt: &mut TranspositionTable) -> i32 {
 
     unsafe {
         nodes_visited += 1;
+    }
+
+    let alpha_orig = alpha;
+    {
+        let (entry, found) = tt.get(board.board_hash);
+        if found != EntryMatch::NoMatch {
+            let entry = match found {
+                EntryMatch::DepthPreferredMatch => &mut entry.depth_preferred,
+                EntryMatch::AlwaysReplaceMatch => &mut entry.always_replace,
+                _ => panic!("This should not happen"),
+            };
+            if entry.depth_searched as u32 >= depth {
+                if entry.flag == ResultFlag::Exact {
+                    // println!("exact match found!");
+                    return entry.eval;
+                } else if entry.flag == ResultFlag::LowerBound {
+                    // println!("lower bound found");
+                    alpha = cmp::max(alpha, entry.eval);
+                } else if entry.flag == ResultFlag::UpperBound {
+                    // println!("upper bound found");
+                    beta = cmp::min(beta, entry.eval);
+                }
+
+                if alpha >= beta {
+                    return entry.eval;
+                }
+            }
+        }
     }
     if depth == 0 {
         return eval_position(board, attack_table);
@@ -75,18 +108,46 @@ fn negamax(board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha:
             return DRAW;
         }
     }
+    let mut value = i32::MIN + 1;
+    let mut best_idx: Option<usize> = None;
     for i in 0..num_moves {
         board.make_move(move_list[i]);
-        let eval = -negamax(board, attack_table, depth-1, -beta, -alpha,);
-        board.undo_move();
-        if eval >= beta {
-            return beta;
+        value = cmp::max(value, -negamax(board, attack_table, depth-1, -beta, -alpha, tt));
+        // alpha = cmp::max(alpha, value);
+        if value > alpha {
+            alpha = value;
+            best_idx = Some(i);
         }
-        if eval > alpha {
-            alpha = eval;
+        board.undo_move();
+        if alpha >= beta {
+            best_idx = Some(i);
+            break;
         }
     }
-    alpha
+
+    let (entry, _) = tt.get(board.board_hash);
+    let node2replace = if depth > entry.depth_preferred.depth_searched as u32 {
+        &mut entry.depth_preferred
+    } else {
+        &mut entry.always_replace
+    };
+    node2replace.hash = board.board_hash;
+    node2replace.depth_searched = depth as u8;
+    node2replace.eval = value;
+    node2replace.flag = if value <= alpha_orig {
+        ResultFlag::UpperBound
+    } else if value >= beta {
+        ResultFlag::LowerBound
+    } else {
+        ResultFlag::Exact
+    };
+    node2replace.best_move = if best_idx.is_some() {
+        Some(move_list[best_idx.unwrap()])
+    } else {
+        None
+    };
+
+    value
 }
 
 fn eval_position(board: &Board, attack_table: &AttackTable) -> i32 {

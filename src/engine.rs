@@ -6,11 +6,13 @@ use crate::chess_move::Move;
 use crate::board_hash::ZobristHasher;
 use crate::search_move::*;
 use crate::shared_perft::*;
+use crate::transposition_table::TranspositionTable;
 
 pub struct Engine {
     board: Board,
     attack_table: AttackTable,
     hasher: Rc<ZobristHasher>,
+    transposition_table: TranspositionTable,
 }
 
 impl Engine {
@@ -24,10 +26,13 @@ impl Engine {
         let hasher = Rc::new(ZobristHasher::new());
         // println!("done");
         let board = Board::new(fen, hasher.clone()).unwrap();
+
+        let transposition_table = TranspositionTable::new(1 << 20);
         Self {
             board,
             attack_table,
             hasher,
+            transposition_table,
         }
     }
 
@@ -50,7 +55,7 @@ impl Engine {
     }
 
     pub fn search_position(&mut self, depth: u32) -> (Move, i32) {
-        search_position(&mut self.board, &self.attack_table, depth)
+        search_position(&mut self.board, &self.attack_table, depth, &mut self.transposition_table)
     }
 
     pub fn string_to_move(&self, chess_move: &str) -> Result<Move, &'static str> {
