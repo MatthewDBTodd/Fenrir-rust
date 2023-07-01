@@ -208,11 +208,14 @@ impl Board {
         // the rook then the castling rights are also voided
         if move_.source_sq == Square::A1 || move_.dest_sq == Square::A1 {
             self.castling_rights.disable(CastlingSide::WhiteQueenside);
-        } else if move_.source_sq == Square::H1 || move_.dest_sq == Square::H1 {
+        } 
+        if move_.source_sq == Square::H1 || move_.dest_sq == Square::H1 {
             self.castling_rights.disable(CastlingSide::WhiteKingside);
-        } else if move_.source_sq == Square::A8 || move_.dest_sq == Square::A8 {
+        } 
+        if move_.source_sq == Square::A8 || move_.dest_sq == Square::A8 {
             self.castling_rights.disable(CastlingSide::BlackQueenside);
-        } else if move_.source_sq == Square::H8 || move_.dest_sq == Square::H8 {
+        } 
+        if move_.source_sq == Square::H8 || move_.dest_sq == Square::H8 {
             self.castling_rights.disable(CastlingSide::BlackKingside);
         
         // Finally, if the king moves, just disable castling by default, easier 
