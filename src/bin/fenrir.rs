@@ -1,6 +1,10 @@
 use std::io::{self, Write};
 use std::time::Instant;
-use fenrir::engine::Engine;
+use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+use std::thread;
+use std::time::Duration;
+
+use fenrir::engine::{Engine, SearchMethod};
 use fenrir::shared_perft::*;
 
 
@@ -33,22 +37,33 @@ fn main() {
             break;
         } else if input == "undo" {
             engine.undo_move();
-        } else if input.starts_with("gen") {
+        } else if input.starts_with("search") {
             let parts: Vec<&str> = input.split_whitespace().collect();
-            assert!(parts.len() == 2);
-            let depth = parts[1].parse::<u32>();
-            if depth.is_ok() {
-                let depth = depth.unwrap();
-                println!("Searching for best move at depth {depth}...");
-                let start = Instant::now();
-                let (best_move, eval) = engine.search_position(depth);
-                let duration = start.elapsed().as_secs_f64();
-                println!("Best move = {} with eval = {eval}. Found in {} seconds", move_string(&best_move), duration);
-                engine.make_move(best_move);
-            } else {
-                println!("invalid input");
+            assert!(parts.len() == 3);
+            let val = parts[2].parse::<u32>();
+            if val.is_err() {
+                println!("Invalid value: {}", parts[2]);
                 continue;
             }
+            let val = val.unwrap();
+            let method = parts[1];
+            let method = if method == "depth" {
+                println!("Searching for best move at depth {val}...");
+                SearchMethod::ToDepth(val)
+            } else if method == "time" {
+                println!("Searching for best move for {val}ms...");
+                SearchMethod::ToTime(Duration::from_millis(val as u64))
+            } else {
+                println!("Invalid search method: {}", parts[1]);
+                continue;
+            };
+
+            let start = Instant::now();
+
+            let (best_move, eval, depth_searched) = engine.search_position(method);
+            let duration = start.elapsed().as_secs_f64();
+            println!("Best move = {} with eval = {eval} at depth {depth_searched}. Found in {} seconds", move_string(&best_move), duration);
+            engine.make_move(best_move);
         } else {
             let chess_move = match engine.string_to_move(&input) {
                 Ok(m) => m,

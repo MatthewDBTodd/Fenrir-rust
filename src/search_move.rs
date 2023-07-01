@@ -3,34 +3,47 @@ use crate::{board::Board, attack_table::AttackTable, chess_move::Move, Colour, P
 use crate::{shared_perft::*, king};
 use crate::eval::{eval_position, DRAW, CHECKMATE};
 use std::cmp;
+use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}};
 
 static mut nodes_visited: u64 = 0;
 
 // alpha-beta search. Returns best move with its eval
 pub fn search_position(
-    board: &mut Board, attack_table: &AttackTable, depth: u32, tt: &mut TranspositionTable,
-) -> (Move, i32) {
+    stop_flag: Arc<AtomicBool>, 
+    board: Arc<Mutex<Board>>, 
+    attack_table: Arc<AttackTable>, 
+    max_depth: u32,
+    tt: Arc<Mutex<TranspositionTable>>,
+) -> (Move, i32, u32) /* (move, eval, depth-reached) */ {
 
     let mut best_move: Move = Move::default();
     let mut best_eval: i32 = i32::MIN + 1;
     // let mut best_index = usize::MAX;
     let mut move_list = [Move::default(); 256];
-    let num_moves = attack_table.generate_legal_moves(board, board.turn_colour, &mut move_list);
+    let mut board = board.lock().unwrap();
+    let num_moves = attack_table.generate_legal_moves(&board, board.turn_colour, &mut move_list);
     println!("checking {} moves...", num_moves);
 
     // let mut prev_num_nodes: u64 = 1;
 
     let mut alpha: i32 = i32::MIN + 1;
     let mut beta: i32 = i32::MAX;
-
-    for current_depth in (1..=depth) {
+    let mut current_depth = 1;
+    'outer: while current_depth <= max_depth {
+        if stop_flag.load(Ordering::Relaxed) {
+            break;
+        }
         let mut current_best_move: Move = Move::default();
         let mut current_best_eval: i32 = i32::MIN + 1;
         let mut current_best_index = 0;
 
         for i in 0..num_moves {
+            if stop_flag.load(Ordering::Relaxed) {
+                break 'outer;
+            }
             board.make_move(move_list[i]);
-            let e = -negamax(board, attack_table, current_depth-1, i32::MIN + 1, -current_best_eval, tt);
+            let mut tt = tt.lock().unwrap();
+            let e = -negamax(&mut board, &attack_table, current_depth-1, i32::MIN + 1, -current_best_eval, &mut tt);
             println!("{:?} -> {e}", move_list[i]);
             board.undo_move();
             if e > current_best_eval {
@@ -53,8 +66,9 @@ pub fn search_position(
             // prev_num_nodes = nodes_visited;
             nodes_visited = 0;
         }
+        current_depth += 1;
     }
-    (best_move, best_eval)
+    (best_move, best_eval, current_depth)
 }
 
 fn negamax(board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha: i32,

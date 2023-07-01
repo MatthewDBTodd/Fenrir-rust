@@ -1,4 +1,5 @@
 use std::rc::Rc;
+use std::sync::Arc;
 use crate::bitboard::*;
 use crate::board_hash::ZobristHasher;
 use crate::{Colour, Square, Piece};
@@ -18,7 +19,7 @@ pub struct Board {
     pub en_passant: Option<Square>,
     pub move_history: Vec<SavedMove>,
     pub board_hash: u64,
-    pub hasher: Rc<ZobristHasher>,
+    pub hasher: Arc<ZobristHasher>,
 }
 
 // ignore move_history and board_hash
@@ -35,7 +36,7 @@ impl PartialEq for Board {
 const STARTING_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 impl Board {
-    pub fn new(fen: Option<&str>, hasher: Rc<ZobristHasher>) -> Result<Board, &'static str> {
+    pub fn new(fen: Option<&str>, hasher: Arc<ZobristHasher>) -> Result<Board, &'static str> {
         let fen = fen.unwrap_or(STARTING_FEN);
         let parts: Vec<&str> = fen.split_ascii_whitespace().collect();
         if parts.len() < 4 {
