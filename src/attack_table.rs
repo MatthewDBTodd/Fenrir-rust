@@ -6,8 +6,6 @@ use crate::sliding_piece::Magic;
 use crate::{king, knight, Piece, Colour, Square};
 use crate::chess_move::{Move, MoveType};
 use crate::bitboard::BitBoard;
-#[cfg(test)]
-use crate::test_helpers::bitmask_to_board;
 include!("blocker_table.rs");
 
 pub struct AttackTable {
@@ -1666,7 +1664,7 @@ mod tests {
     use crate::{test_helpers::*, board_hash::ZobristHasher};
     use super::*;
     use crate::Square;
-    use std::rc::Rc;
+    use std::sync::Arc;
     
     macro_rules! test_all_pinned_piece_legal_moves {
         ($test_description:expr,
@@ -1731,14 +1729,14 @@ mod tests {
         //           "Check no discovered checks for r1bqkb1r/ppp2ppp/2np1n2/1B2p2Q/8/2N2N2/PPPP1PPP/R1B1R1K1"
         // );
         
-        let expected_check_squares: [u64; 6] = [
-            fen_to_hex("8/8/8/8/8/8/5p1p/8 w - - 0 1"), // pawns
-            fen_to_hex("8/8/8/8/8/8/5kkk/5k1k w - - 0 1"), // king
-            fen_to_hex("8/8/8/8/8/8/5qqq/4qq1q w - - 0 1"), // queen
-            fen_to_hex("8/8/8/8/8/8/5p1p/8 w - - 0 1"), // bishop
-            fen_to_hex("8/8/8/8/8/5n1n/4n3/8 w - - 0 1"), // knight
-            fen_to_hex("8/8/8/8/8/8/6r1/4rr1r w - - 0 1"), // rook
-        ];
+        // let expected_check_squares: [u64; 6] = [
+        //     fen_to_hex("8/8/8/8/8/8/5p1p/8 w - - 0 1"), // pawns
+        //     fen_to_hex("8/8/8/8/8/8/5kkk/5k1k w - - 0 1"), // king
+        //     fen_to_hex("8/8/8/8/8/8/5qqq/4qq1q w - - 0 1"), // queen
+        //     fen_to_hex("8/8/8/8/8/8/5p1p/8 w - - 0 1"), // bishop
+        //     fen_to_hex("8/8/8/8/8/5n1n/4n3/8 w - - 0 1"), // knight
+        //     fen_to_hex("8/8/8/8/8/8/6r1/4rr1r w - - 0 1"), // rook
+        // ];
         
         // for (i, (expected, actual)) in expected_check_squares.iter()
         //                                                      .zip(board_status.check_squares.iter())
@@ -1788,14 +1786,14 @@ mod tests {
         //            "Check no discovered checks for rnb1r1k1/pppp1ppp/5n2/8/1b5q/2N2PP1/PPPPP2P/R1BQKBNR"
         // );
 
-        let expected_check_squares: [u64; 6] = [
-            fen_to_hex("8/5P1P/8/8/8/8/8/8 w - - 0 1"), // pawns
-            fen_to_hex("5K1K/5KKK/8/8/8/8/8/8 w - - 0 1"), // king
-            fen_to_hex("4QQ1Q/5QQQ/8/8/8/8/8/8 w - - 0 1"), // queen
-            fen_to_hex("8/5P1P/8/8/8/8/8/8 w - - 0 1"), // bishop
-            fen_to_hex("8/4N3/5N1N/8/8/8/8/8 w - - 0 1"), // knight
-            fen_to_hex("4RR1R/6R1/8/8/8/8/8/8 w - - 0 1"), // rook
-        ];
+        // let expected_check_squares: [u64; 6] = [
+        //     fen_to_hex("8/5P1P/8/8/8/8/8/8 w - - 0 1"), // pawns
+        //     fen_to_hex("5K1K/5KKK/8/8/8/8/8/8 w - - 0 1"), // king
+        //     fen_to_hex("4QQ1Q/5QQQ/8/8/8/8/8/8 w - - 0 1"), // queen
+        //     fen_to_hex("8/5P1P/8/8/8/8/8/8 w - - 0 1"), // bishop
+        //     fen_to_hex("8/4N3/5N1N/8/8/8/8/8 w - - 0 1"), // knight
+        //     fen_to_hex("4RR1R/6R1/8/8/8/8/8/8 w - - 0 1"), // rook
+        // ];
 
         //for (i, (expected, actual)) in expected_check_squares.iter()
         //                                                     .zip(board_status.check_squares.iter())
@@ -1844,14 +1842,14 @@ mod tests {
         //            "Check no discovered checks for 8/1K6/8/4k3/8/2r3P1/8/Q3R3"
         // );
         
-        let expected_check_squares: [u64; 6] = [
-            fen_to_hex("p1p5/8/8/8/8/8/8/8 w - - 0 1"), // pawns
-            fen_to_hex("kkk5/k1k5/kkk5/8/8/8/8/8 w - - 0 1"), // king
-            fen_to_hex("qqq5/q1qqqqqq/qqq5/1q1q4/1q2q3/1q3q2/1q4q1/1q5q w - - 0 1"), // queen
-            fen_to_hex("b1b5/8/b1b5/3b4/4b3/5b2/6b1/7b w - - 0 1"), // bishop
-            fen_to_hex("3n4/8/3n4/n1n5/8/8/8/8 w - - 0 1"), // knight
-            fen_to_hex("1r6/r1rrrrrr/1r6/1r6/1r6/1r6/1r6/1r6 w - - 0 1"), // rook
-        ];
+        // let expected_check_squares: [u64; 6] = [
+        //     fen_to_hex("p1p5/8/8/8/8/8/8/8 w - - 0 1"), // pawns
+        //     fen_to_hex("kkk5/k1k5/kkk5/8/8/8/8/8 w - - 0 1"), // king
+        //     fen_to_hex("qqq5/q1qqqqqq/qqq5/1q1q4/1q2q3/1q3q2/1q4q1/1q5q w - - 0 1"), // queen
+        //     fen_to_hex("b1b5/8/b1b5/3b4/4b3/5b2/6b1/7b w - - 0 1"), // bishop
+        //     fen_to_hex("3n4/8/3n4/n1n5/8/8/8/8 w - - 0 1"), // knight
+        //     fen_to_hex("1r6/r1rrrrrr/1r6/1r6/1r6/1r6/1r6/1r6 w - - 0 1"), // rook
+        // ];
         
         // for (i, (expected, actual)) in expected_check_squares.iter()
         //                                                      .zip(board_status.check_squares.iter())
@@ -1928,7 +1926,7 @@ mod tests {
         );
         
         // -----------------------------------------------------------------------------------------
-        let hasher = Rc::new(ZobristHasher::new());
+        let hasher = Arc::new(ZobristHasher::new());
         let board = Board::new(Some("8/4k3/8/8/6p1/5p2/4K3/8 w - - 0 1"), hasher.clone()).unwrap();
         assert!(attack_table.king_in_check(&board));
         // -----------------------------------------------------------------------------------------

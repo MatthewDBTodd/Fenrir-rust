@@ -1,7 +1,5 @@
 use rand::Rng;
 use crate::{board::Board, chess_move::{MoveType, SavedMove}, Piece, Colour, Square};
-#[cfg(test)]
-use crate::chess_move::Move;
 
 // Zobrist hashing
 #[derive(Debug)]
@@ -186,12 +184,13 @@ impl ZobristHasher {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::chess_move::Move;
     use crate::{Square, Piece};
-    use std::rc::Rc;
+    use std::sync::Arc;
 
     #[test]
     fn test_undo_quiet() {
-        let hasher = Rc::new(ZobristHasher::new());
+        let hasher = Arc::new(ZobristHasher::new());
         let mut board = Board::new(None, hasher.clone()).unwrap();
         let old_hash = board.board_hash;
         board.make_move(
@@ -208,7 +207,7 @@ mod tests {
 
     #[test]
     fn test_undo_capture() {
-        let hasher = Rc::new(ZobristHasher::new());
+        let hasher = Arc::new(ZobristHasher::new());
         let mut board = Board::new(
             Some("r1bqkbnr/ppp2ppp/2np4/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 4"),
             hasher.clone()
@@ -228,7 +227,7 @@ mod tests {
 
     #[test]
     fn test_undo_double_pawn_push() {
-        let hasher = Rc::new(ZobristHasher::new());
+        let hasher = Arc::new(ZobristHasher::new());
         let mut board = Board::new(None, hasher.clone()).unwrap();
         let old_hash = board.board_hash;
         board.make_move(
@@ -245,7 +244,7 @@ mod tests {
 
     #[test]
     fn test_undo_en_passant() {
-        let hasher = Rc::new(ZobristHasher::new());
+        let hasher = Arc::new(ZobristHasher::new());
         let mut board = Board::new(
             Some("rnbqkbnr/pp1ppppp/8/8/2pPP3/5N2/PPP2PPP/RNBQKB1R b KQkq d3 0 3"),
             hasher.clone(),
@@ -265,7 +264,7 @@ mod tests {
 
     #[test]
     fn test_undo_castle_king_side() {
-        let hasher = Rc::new(ZobristHasher::new());
+        let hasher = Arc::new(ZobristHasher::new());
         let mut board = Board::new(
             Some("rnbqk2r/pppp1ppp/5n2/2b1p3/4P3/3P1N2/PPP1BPPP/RNBQK2R b KQkq - 2 4"),
             hasher.clone(),
@@ -285,7 +284,7 @@ mod tests {
 
     #[test]
     fn test_undo_castle_queen_side() {
-        let hasher = Rc::new(ZobristHasher::new());
+        let hasher = Arc::new(ZobristHasher::new());
         let mut board = Board::new(
             Some("r1bq1rk1/ppppbppp/2n2n2/4p3/4P3/1PN5/PBPPQPPP/R3KBNR w KQ - 5 6"),
             hasher.clone()
@@ -305,7 +304,7 @@ mod tests {
 
     #[test]
     fn test_undo_move_promotion() {
-        let hasher = Rc::new(ZobristHasher::new());
+        let hasher = Arc::new(ZobristHasher::new());
         let mut board = Board::new(
             Some("rnbqkbnr/ppp1pppp/8/8/2B5/2N5/PPPPKpPP/R1BQ2NR b kq - 1 5"),
             hasher.clone(),
@@ -325,7 +324,7 @@ mod tests {
 
     #[test]
     fn test_undo_capture_promotion() {
-        let hasher = Rc::new(ZobristHasher::new());
+        let hasher = Arc::new(ZobristHasher::new());
         let mut board = Board::new(
             Some("r1bqkb1r/pP2pppp/2n2n2/8/8/8/PPPP1PPP/RNBQKBNR w KQkq - 1 5"),
             hasher.clone(),

@@ -3,8 +3,6 @@ use rand::Rng;
 use rand::rngs::ThreadRng;
 use crate::masks::*;
 #[cfg(test)]
-use crate::test_helpers::bitmask_to_board;
-#[cfg(test)]
 use crate::Square;
 
 /*

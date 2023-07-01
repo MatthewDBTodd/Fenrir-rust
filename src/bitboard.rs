@@ -263,8 +263,6 @@ impl fmt::Debug for BitBoard {
 
 #[cfg(test)]
 mod tests {
-    use crate::test_helpers::*;
-
     use super::*;
 
     #[test]

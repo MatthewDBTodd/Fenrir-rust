@@ -469,7 +469,7 @@ mod tests {
     #[test]
     fn test_fen_initial_position() {
         let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-        let hasher = Rc::new(ZobristHasher::new());
+        let hasher = Arc::new(ZobristHasher::new());
         let board = Board::new(Some(fen), hasher.clone()).unwrap();
 
         assert_eq!(board.turn_colour, Colour::White);
@@ -570,7 +570,7 @@ mod tests {
     #[test]
     fn test_fen_custom_position() {
         let fen = "8/8/8/3k4/8/8/4K3/8 w - - 0 1";
-        let hasher = Rc::new(ZobristHasher::new());
+        let hasher = Arc::new(ZobristHasher::new());
         let board = Board::new(Some(fen), hasher.clone()).unwrap();
 
         assert_eq!(board.turn_colour, Colour::White);
@@ -589,7 +589,7 @@ mod tests {
     #[test]
     fn test_fen_en_passant() {
         let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq e3 0 1";
-        let hasher = Rc::new(ZobristHasher::new());
+        let hasher = Arc::new(ZobristHasher::new());
         let board = Board::new(Some(fen), hasher.clone()).unwrap();
 
         assert_eq!(board.turn_colour, Colour::Black);
@@ -607,7 +607,7 @@ mod tests {
 
     #[test]
     fn test_fen_invalid() {
-        let hasher = Rc::new(ZobristHasher::new());
+        let hasher = Arc::new(ZobristHasher::new());
 
         let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
         let board = Board::new(Some(fen), hasher.clone());
@@ -632,7 +632,7 @@ mod tests {
     #[test]
     fn test_fen_partial_castling_rights() {
         let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQk - 0 1";
-        let hasher = Rc::new(ZobristHasher::new());
+        let hasher = Arc::new(ZobristHasher::new());
         let board = Board::new(Some(fen), hasher.clone()).unwrap();
 
         assert_eq!(board.turn_colour, Colour::White);
@@ -650,7 +650,7 @@ mod tests {
 
     #[test]
     fn test_quiet_move() {
-        let hasher = Rc::new(ZobristHasher::new());
+        let hasher = Arc::new(ZobristHasher::new());
         let expected_fen = "rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 1 1";
         let expected_board = Board::new(Some(expected_fen), hasher.clone()).unwrap();
 
@@ -673,7 +673,7 @@ mod tests {
 
     #[test]
     fn test_capture() {
-        let hasher = Rc::new(ZobristHasher::new());
+        let hasher = Arc::new(ZobristHasher::new());
         let expected_fen = "rnbqkb1r/ppp1pppp/5n2/8/2BP4/4P3/PP3PPP/RNBQK1NR b KQkq - 0 4";
         let expected_board = Board::new(Some(expected_fen), hasher.clone()).unwrap();
 
@@ -696,7 +696,7 @@ mod tests {
     
     #[test]
     fn test_double_pawn_push() {
-        let hasher = Rc::new(ZobristHasher::new());
+        let hasher = Arc::new(ZobristHasher::new());
         let expected_fen = "rnbqkbnr/pp1ppppp/8/8/2pP1P2/4P3/PPP3PP/RNBQKBNR b KQkq d3 0 3";
         let expected_board = Board::new(Some(expected_fen), hasher.clone()).unwrap();
 
@@ -720,7 +720,7 @@ mod tests {
 
     #[test]
     fn test_en_passant() {
-        let hasher = Rc::new(ZobristHasher::new());
+        let hasher = Arc::new(ZobristHasher::new());
         let expected_fen = "rnbqkbnr/p1p1pppp/1p1P4/8/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 3";
         let expected_board = Board::new(Some(expected_fen), hasher.clone()).unwrap();
 
@@ -744,7 +744,7 @@ mod tests {
 
     #[test]
     fn test_castle_kingside_white() {
-        let hasher = Rc::new(ZobristHasher::new());
+        let hasher = Arc::new(ZobristHasher::new());
         let expected_fen = "r1bqkb1r/pppp1ppp/2n2n2/1B2p3/4P3/5N2/PPPP1PPP/RNBQ1RK1 b kq - 5 4";
         let expected_board = Board::new(Some(expected_fen), hasher.clone()).unwrap();
 
@@ -768,7 +768,7 @@ mod tests {
 
     #[test]
     fn test_castle_kingside_black() {
-        let hasher = Rc::new(ZobristHasher::new());
+        let hasher = Arc::new(ZobristHasher::new());
         let expected_fen = "r1bq1rk1/pppp1ppp/2n2n2/1Bb1p3/4P3/3P1N2/PPP2PPP/RNBQ1RK1 w - - 1 6";
         let expected_board = Board::new(Some(expected_fen), hasher.clone()).unwrap();
 
@@ -792,7 +792,7 @@ mod tests {
 
     #[test]
     fn test_castle_queenside_white() {
-        let hasher = Rc::new(ZobristHasher::new());
+        let hasher = Arc::new(ZobristHasher::new());
         let expected_fen = "r3kbnr/pppqpppp/2n5/3p1b2/3P1B2/2N5/PPPQPPPP/2KR1BNR b kq - 7 5";
         let expected_board = Board::new(Some(expected_fen), hasher.clone()).unwrap();
 
@@ -816,7 +816,7 @@ mod tests {
 
     #[test]
     fn test_castle_queenside_black() {
-        let hasher = Rc::new(ZobristHasher::new());
+        let hasher = Arc::new(ZobristHasher::new());
         let expected_fen = "2kr1bnr/pppqpppp/2n5/3p1b2/3P1B2/2N5/PPPQPPPP/2KR1BNR w - - 8 6";
         let expected_board = Board::new(Some(expected_fen), hasher.clone()).unwrap();
 
@@ -840,7 +840,7 @@ mod tests {
 
     #[test]
     fn test_move_promotion() {
-        let hasher = Rc::new(ZobristHasher::new());
+        let hasher = Arc::new(ZobristHasher::new());
         let expected_fen = "r1bqkbQr/ppppp2p/2n2n2/8/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 5";
         let expected_board = Board::new(Some(expected_fen), hasher.clone()).unwrap();
 
@@ -864,7 +864,7 @@ mod tests {
 
     #[test]
     fn test_capture_promotion() {
-        let hasher = Rc::new(ZobristHasher::new());
+        let hasher = Arc::new(ZobristHasher::new());
         let expected_fen = "rnbqkbnr/pppp1ppp/8/8/8/2N1PN2/P4PPP/r1BQKB1R w Kkq - 0 6";
         let expected_board = Board::new(Some(expected_fen), hasher.clone()).unwrap();
 
