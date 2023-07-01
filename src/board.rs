@@ -1,4 +1,3 @@
-use std::rc::Rc;
 use std::sync::Arc;
 use crate::bitboard::*;
 use crate::board_hash::ZobristHasher;
@@ -7,7 +6,7 @@ use crate::chess_move::{Move, SavedMove, MoveType};
 
 use std::fmt;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct Board {
     pub bitboard: BitBoard,

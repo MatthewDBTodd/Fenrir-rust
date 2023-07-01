@@ -166,13 +166,13 @@ pub fn string_to_move(chess_move: &str, board: &Board) -> Result<Move, &'static 
             MoveType::Quiet
         }
     } else if piece == Piece::King {
-        if (source_sq == Square::E1 && dest_sq == Square::G1) {
+        if source_sq == Square::E1 && dest_sq == Square::G1 {
             MoveType::CastleKingSide
-        } else if (source_sq == Square::E1 && dest_sq == Square::C1) {
+        } else if source_sq == Square::E1 && dest_sq == Square::C1 {
             MoveType::CastleQueenSide
-        } else if (source_sq == Square::E8 && dest_sq == Square::G8) {
+        } else if source_sq == Square::E8 && dest_sq == Square::G8 {
             MoveType::CastleKingSide
-        } else if (source_sq == Square::E8 && dest_sq == Square::C8) {
+        } else if source_sq == Square::E8 && dest_sq == Square::C8 {
             MoveType::CastleQueenSide
         } else {
             MoveType::Quiet

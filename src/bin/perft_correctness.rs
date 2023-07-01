@@ -11,7 +11,7 @@ fn main() {
                 .short('d')
                 .long("depth")
                 .action(ArgAction::Set)
-                .value_parser((clap::value_parser!(u32)))
+                .value_parser(clap::value_parser!(u32))
                 .value_name("DEPTH")
                 .help("The depth to search on the given FEN string")
                 .required(true)
@@ -53,7 +53,7 @@ fn main() {
         let depth = cli.get_one::<u32>("depth").copied().unwrap();
         let fen = cli.get_one::<String>("fen").unwrap();
         let verbose = cli.get_flag("verbose");
-        let print_timings = cli.get_flag("print_timings");
+        // let print_timings = cli.get_flag("print_timings");
         let moves: Vec<String> = cli.get_many("moves")
             .unwrap_or_default()
             .cloned()

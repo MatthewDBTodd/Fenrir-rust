@@ -1,10 +1,8 @@
 use std::io::{self, Write};
 use std::time::Instant;
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
-use std::thread;
 use std::time::Duration;
 
-use fenrir::engine::{Engine, SearchMethod};
+use fenrir::engine::{Engine, SearchMethod, GameState};
 use fenrir::shared_perft::*;
 
 
@@ -29,6 +27,18 @@ fn main() {
     let mut engine = Engine::new(fen);
     loop {
         println!("{engine}");
+        let game_state = engine.get_game_state();
+        if game_state == GameState::WhiteVictory {
+            println!("Game over: White wins");
+            break;
+        } else if game_state == GameState::BlackVictory {
+            println!("Game over: Black wins");
+            break;
+        } else if game_state == GameState::Draw {
+            println!("Game over: Draw");
+            break;
+        }
+
         let input = get_user_input();
 
         if input.is_empty() {
@@ -62,6 +72,7 @@ fn main() {
 
             let (best_move, eval, depth_searched) = engine.search_position(method);
             let duration = start.elapsed().as_secs_f64();
+            let best_move = best_move.unwrap();
             println!("Best move = {} with eval = {eval} at depth {depth_searched}. Found in {} seconds", move_string(&best_move), duration);
             engine.make_move(best_move);
         } else {

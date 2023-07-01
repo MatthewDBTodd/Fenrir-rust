@@ -1,4 +1,5 @@
 use crate::masks::*;
+#[cfg(test)]
 use crate::{Colour, Square};
 
 // Indexed by colour

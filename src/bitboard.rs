@@ -15,7 +15,7 @@ struct PieceColour(Piece, Colour);
  * Each piece has a u64 along with each colour, so if we want all white bishops
  * we AND the bishop mask with the white mask.
  */
-#[derive(Default, PartialEq)]
+#[derive(Default, PartialEq, Clone)]
 pub struct BitBoard {
     // indexed by colour, i.e. white = 0, black = 1
     colours: [u64; 2],

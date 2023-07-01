@@ -1,33 +1,44 @@
 use crate::transposition_table::{TranspositionTable, EntryMatch, ResultFlag};
-use crate::{board::Board, attack_table::AttackTable, chess_move::Move, Colour, Piece};
-use crate::{shared_perft::*, king};
+use crate::{board::Board, attack_table::AttackTable, chess_move::Move, Colour};
+use crate::shared_perft::*;
 use crate::eval::{eval_position, DRAW, CHECKMATE};
+use crate::engine::LegalMoves;
 use std::cmp;
+use std::sync::Condvar;
 use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}};
 
-static mut nodes_visited: u64 = 0;
+static mut NODES_VISITED: u64 = 0;
 
 // alpha-beta search. Returns best move with its eval
 pub fn search_position(
+    mut legal_moves: LegalMoves,
     stop_flag: Arc<AtomicBool>, 
-    board: Arc<Mutex<Board>>, 
+    mut board: Board, 
     attack_table: Arc<AttackTable>, 
     max_depth: u32,
     tt: Arc<Mutex<TranspositionTable>>,
-) -> (Move, i32, u32) /* (move, eval, depth-reached) */ {
+    cv: Arc<(Mutex<()>, Condvar)>,
+) -> (Option<Move>, i32, u32) /* (move, eval, depth-reached) */ {
 
     let mut best_move: Move = Move::default();
     let mut best_eval: i32 = i32::MIN + 1;
     // let mut best_index = usize::MAX;
-    let mut move_list = [Move::default(); 256];
-    let mut board = board.lock().unwrap();
-    let num_moves = attack_table.generate_legal_moves(&board, board.turn_colour, &mut move_list);
-    println!("checking {} moves...", num_moves);
+    // let mut move_list = [Move::default(); 256];
+    // let mut board = board.lock().unwrap();
+    // let num_moves = attack_table.generate_legal_moves(&board, board.turn_colour, &mut move_list);
+
+    // if num_moves == 0 {
+    //     return (None, get_end_condition(&board, &attack_table), 0);
+    // }
+    if legal_moves.num == 0 {
+        return (None, 0, 0);
+    }
+    println!("checking {} moves...", legal_moves.num);
 
     // let mut prev_num_nodes: u64 = 1;
 
-    let mut alpha: i32 = i32::MIN + 1;
-    let mut beta: i32 = i32::MAX;
+    // let mut alpha: i32 = i32::MIN + 1;
+    // let mut beta: i32 = i32::MAX;
     let mut current_depth = 1;
     'outer: while current_depth <= max_depth {
         if stop_flag.load(Ordering::Relaxed) {
@@ -37,11 +48,11 @@ pub fn search_position(
         let mut current_best_eval: i32 = i32::MIN + 1;
         let mut current_best_index = 0;
 
-        for i in 0..num_moves {
+        for i in 0..legal_moves.num {
             if stop_flag.load(Ordering::Relaxed) {
                 break 'outer;
             }
-            board.make_move(move_list[i]);
+            board.make_move(legal_moves.move_list[i]);
             let mut tt = tt.lock().unwrap();
             let e = negamax(
                 &mut board, 
@@ -57,11 +68,16 @@ pub fn search_position(
                 break 'outer;
             }
             let e = -e.unwrap();
-            println!("{:?} -> {e}", move_list[i]);
+            println!("{:?} -> {e}", legal_moves.move_list[i]);
             if e > current_best_eval {
-                current_best_move = move_list[i];
+                current_best_move = legal_moves.move_list[i];
                 current_best_eval = e;
                 current_best_index = i;
+            }
+            if current_best_eval == CHECKMATE {
+                let _guard = cv.0.lock().unwrap();
+                cv.1.notify_one();
+                break;
             }
         }
         best_move = current_best_move;
@@ -69,25 +85,25 @@ pub fn search_position(
         // best_index = current_best_index;
         println!("Depth {current_depth}: {} with eval {best_eval}", move_string(&best_move));
         for i in (1..=current_best_index).rev() {
-            move_list.swap(i-1, i);
+            legal_moves.move_list.swap(i-1, i);
         }
 
         unsafe {
-            let bf = branching_factor(nodes_visited, current_depth);
+            let bf = branching_factor(NODES_VISITED, current_depth);
             println!("branching factor = {}", bf);
             // prev_num_nodes = nodes_visited;
-            nodes_visited = 0;
+            NODES_VISITED = 0;
         }
         current_depth += 1;
     }
-    (best_move, best_eval, current_depth-1)
+    (Some(best_move), best_eval, current_depth-1)
 }
 
 fn negamax(board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha: i32,
            mut beta: i32, tt: &mut TranspositionTable, stop_flag: &AtomicBool) -> Option<i32> {
 
     unsafe {
-        nodes_visited += 1;
+        NODES_VISITED += 1;
     }
 
     let alpha_orig = alpha;
@@ -123,14 +139,7 @@ fn negamax(board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha:
     let mut move_list = [Move::default(); 256];
     let num_moves = attack_table.generate_legal_moves(board, board.turn_colour, &mut move_list);
     if num_moves == 0 {
-        if attack_table.king_in_check(board) {
-            match board.turn_colour {
-                Colour::White => return Some(-CHECKMATE),
-                Colour::Black => return Some(CHECKMATE),
-            }
-        } else {
-            return Some(DRAW);
-        }
+        return Some(get_end_condition(board, attack_table));
     }
     let mut value = i32::MIN + 1;
     let mut best_idx: Option<usize> = None;
@@ -145,6 +154,9 @@ fn negamax(board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha:
             return None;
         }
         value = cmp::max(value, -rv.unwrap());
+        if value == CHECKMATE {
+            return Some(CHECKMATE);
+        }
         // alpha = cmp::max(alpha, value);
         if value > alpha {
             alpha = value;
@@ -179,6 +191,17 @@ fn negamax(board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha:
     };
 
     Some(value)
+}
+
+fn get_end_condition(board: &Board, att_table: &AttackTable) -> i32 {
+    if att_table.king_in_check(board) {
+        match board.turn_colour {
+            Colour::White => return -CHECKMATE,
+            Colour::Black => return CHECKMATE,
+        }
+    } else {
+        return DRAW;
+    }
 }
 
 fn branching_factor(nodes: u64, depth: u32) -> f64 {

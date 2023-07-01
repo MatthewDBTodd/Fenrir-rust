@@ -6,6 +6,7 @@ use crate::sliding_piece::Magic;
 use crate::{king, knight, Piece, Colour, Square};
 use crate::chess_move::{Move, MoveType};
 use crate::bitboard::BitBoard;
+#[cfg(test)]
 use crate::test_helpers::bitmask_to_board;
 include!("blocker_table.rs");
 

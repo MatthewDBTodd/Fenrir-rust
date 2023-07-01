@@ -49,7 +49,7 @@ pub fn eval_position(board: &Board, attack_table: &AttackTable) -> i32 {
             let white_piece = white_pieces & white_pieces.wrapping_neg();
             white_pieces ^= white_piece;
 
-            w_pst_eval += (PIECE_SQUARE_TABLES[Colour::White as usize][piece_type as usize][white_piece.trailing_zeros() as usize]);
+            w_pst_eval += PIECE_SQUARE_TABLES[Colour::White as usize][piece_type as usize][white_piece.trailing_zeros() as usize];
         }
 
 
@@ -59,7 +59,7 @@ pub fn eval_position(board: &Board, attack_table: &AttackTable) -> i32 {
             let black_piece = black_pieces & black_pieces.wrapping_neg();
             black_pieces ^= black_piece;
 
-            b_pst_eval += (PIECE_SQUARE_TABLES[Colour::Black as usize][piece_type as usize][black_piece.trailing_zeros() as usize]);
+            b_pst_eval += PIECE_SQUARE_TABLES[Colour::Black as usize][piece_type as usize][black_piece.trailing_zeros() as usize];
         }
 
         let val = weight * (white_count as i32 - black_count as i32);

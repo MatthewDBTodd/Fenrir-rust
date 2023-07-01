@@ -1,8 +1,11 @@
-use crate::{Piece, Square};
+use crate::Piece;
 use rand::Rng;
 use rand::rngs::ThreadRng;
 use crate::masks::*;
+#[cfg(test)]
 use crate::test_helpers::bitmask_to_board;
+#[cfg(test)]
+use crate::Square;
 
 /*
  * attacks: a vector of size 2^n, where n is the number of set bits in the mask.

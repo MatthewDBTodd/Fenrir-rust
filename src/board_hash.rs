@@ -1,5 +1,7 @@
 use rand::Rng;
-use crate::{board::Board, chess_move::Move, chess_move::{MoveType, SavedMove}, Piece, Colour, Square};
+use crate::{board::Board, chess_move::{MoveType, SavedMove}, Piece, Colour, Square};
+#[cfg(test)]
+use crate::chess_move::Move;
 
 // Zobrist hashing
 #[derive(Debug)]
