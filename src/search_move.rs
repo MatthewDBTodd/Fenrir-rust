@@ -43,9 +43,21 @@ pub fn search_position(
             }
             board.make_move(move_list[i]);
             let mut tt = tt.lock().unwrap();
-            let e = -negamax(&mut board, &attack_table, current_depth-1, i32::MIN + 1, -current_best_eval, &mut tt);
-            println!("{:?} -> {e}", move_list[i]);
+            let e = negamax(
+                &mut board, 
+                &attack_table, 
+                current_depth-1, 
+                i32::MIN + 1, 
+                -current_best_eval, 
+                &mut tt,
+                &stop_flag,
+            );
             board.undo_move();
+            if e.is_none() {
+                break 'outer;
+            }
+            let e = -e.unwrap();
+            println!("{:?} -> {e}", move_list[i]);
             if e > current_best_eval {
                 current_best_move = move_list[i];
                 current_best_eval = e;
@@ -68,11 +80,11 @@ pub fn search_position(
         }
         current_depth += 1;
     }
-    (best_move, best_eval, current_depth)
+    (best_move, best_eval, current_depth-1)
 }
 
 fn negamax(board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha: i32,
-           mut beta: i32, tt: &mut TranspositionTable) -> i32 {
+           mut beta: i32, tt: &mut TranspositionTable, stop_flag: &AtomicBool) -> Option<i32> {
 
     unsafe {
         nodes_visited += 1;
@@ -90,7 +102,7 @@ fn negamax(board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha:
             if entry.depth_searched as u32 >= depth {
                 if entry.flag == ResultFlag::Exact {
                     // println!("exact match found!");
-                    return entry.eval;
+                    return Some(entry.eval);
                 } else if entry.flag == ResultFlag::LowerBound {
                     // println!("lower bound found");
                     alpha = cmp::max(alpha, entry.eval);
@@ -100,37 +112,44 @@ fn negamax(board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha:
                 }
 
                 if alpha >= beta {
-                    return entry.eval;
+                    return Some(entry.eval);
                 }
             }
         }
     }
     if depth == 0 {
-        return eval_position(board, attack_table);
+        return Some(eval_position(board, attack_table));
     }
     let mut move_list = [Move::default(); 256];
     let num_moves = attack_table.generate_legal_moves(board, board.turn_colour, &mut move_list);
     if num_moves == 0 {
         if attack_table.king_in_check(board) {
             match board.turn_colour {
-                Colour::White => return -CHECKMATE,
-                Colour::Black => return CHECKMATE,
+                Colour::White => return Some(-CHECKMATE),
+                Colour::Black => return Some(CHECKMATE),
             }
         } else {
-            return DRAW;
+            return Some(DRAW);
         }
     }
     let mut value = i32::MIN + 1;
     let mut best_idx: Option<usize> = None;
     for i in 0..num_moves {
+        if stop_flag.load(Ordering::Relaxed) {
+            return None;
+        }
         board.make_move(move_list[i]);
-        value = cmp::max(value, -negamax(board, attack_table, depth-1, -beta, -alpha, tt));
+        let rv = negamax(board, attack_table, depth-1, -beta, -alpha, tt, stop_flag);
+        board.undo_move();
+        if rv.is_none() {
+            return None;
+        }
+        value = cmp::max(value, -rv.unwrap());
         // alpha = cmp::max(alpha, value);
         if value > alpha {
             alpha = value;
             best_idx = Some(i);
         }
-        board.undo_move();
         if alpha >= beta {
             best_idx = Some(i);
             break;
@@ -159,7 +178,7 @@ fn negamax(board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha:
         None
     };
 
-    value
+    Some(value)
 }
 
 fn branching_factor(nodes: u64, depth: u32) -> f64 {
