@@ -30,7 +30,7 @@ pub fn eval_position(board: &Board, attack_table: &AttackTable) -> i32 {
         let legal_moves = attack_table.generate_legal_moves(board, Colour::Black, &mut move_list);
         if legal_moves == 0 && attack_table.king_in_check(board) {
             // println!("black in checkmate in eval_position");
-            return CHECKMATE;
+            return -CHECKMATE;
         } else if legal_moves == 0 {
             return DRAW;
         }
@@ -94,10 +94,10 @@ pub fn eval_position(board: &Board, attack_table: &AttackTable) -> i32 {
 }
 
 // returns doubled and isolated pawns
-fn pawn_eval(board: &Board, colour: Colour) -> (u32, u32) {
+fn pawn_eval(board: &Board, colour: Colour) -> (i32, i32) {
     let pawns = board.bitboard.get_colour_piece_mask(Piece::Pawn, colour);
-    let mut doubled_pawns: u32 = 0;
-    let mut isolated_pawns: u32 = 0;
+    let mut doubled_pawns: i32 = 0;
+    let mut isolated_pawns: i32 = 0;
     let mut pawns_tmp = pawns;
     while pawns_tmp != 0 {
         let pawn = pawns_tmp & pawns_tmp.wrapping_neg();
@@ -105,7 +105,7 @@ fn pawn_eval(board: &Board, colour: Colour) -> (u32, u32) {
         let idx = pawn.trailing_zeros() as usize;
         let pawns_on_file = pawns & FILES[idx];
         pawns_tmp = pawns_tmp & !pawns_on_file;
-        let num_pawns_on_file = pawns_on_file.count_ones();
+        let num_pawns_on_file = pawns_on_file.count_ones() as i32;
         doubled_pawns += num_pawns_on_file - 1;
 
         if pawns & ISOLATED[idx] == 0 {

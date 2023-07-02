@@ -6,6 +6,7 @@ use crate::attack_table::AttackTable;
 use crate::board::Board;
 use crate::chess_move::Move;
 use crate::board_hash::ZobristHasher;
+use crate::eval::eval_position;
 use crate::search_move::*;
 use crate::shared_perft::*;
 use crate::transposition_table::TranspositionTable;
@@ -161,6 +162,10 @@ impl Engine {
 
     pub fn perft(&mut self, depth: u32, verbose: bool) -> usize {
         perft(&mut self.board, &self.attack_table, depth, verbose)
+    }
+
+    pub fn eval(&self) -> i32 {
+        eval_position(&self.board, &self.attack_table)
     }
 }
 

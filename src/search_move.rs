@@ -1,5 +1,5 @@
 use crate::transposition_table::{TranspositionTable, EntryMatch, ResultFlag};
-use crate::{board::Board, attack_table::AttackTable, chess_move::Move, Colour};
+use crate::{board::Board, attack_table::AttackTable, chess_move::Move,};
 use crate::shared_perft::*;
 use crate::eval::{eval_position, DRAW, CHECKMATE};
 use crate::engine::LegalMoves;
@@ -31,7 +31,7 @@ pub fn search_position(
     //     return (None, get_end_condition(&board, &attack_table), 0);
     // }
     if legal_moves.num == 0 {
-        return (None, 0, 0);
+        panic!("This should not have happened");
     }
     println!("checking {} moves...", legal_moves.num);
 
@@ -77,7 +77,7 @@ pub fn search_position(
             if current_best_eval == CHECKMATE {
                 let _guard = cv.0.lock().unwrap();
                 cv.1.notify_one();
-                break;
+                return (Some(current_best_move), current_best_eval, current_depth-1);
             }
         }
         best_move = current_best_move;
@@ -147,7 +147,7 @@ fn negamax(board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha:
     let num_moves = attack_table.generate_legal_moves(board, board.turn_colour, &mut move_list);
     // game is over, either checkmate or stalemate
     if num_moves == 0 {
-        return Some(-get_end_condition(board, attack_table));
+        return Some(get_end_condition(board, attack_table));
     }
     // we check for the fifty move rule after checking for checkmate/stalemate just incase
     // the fiftieth move is a checkmate
@@ -210,10 +210,7 @@ fn negamax(board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha:
 // check for checkmates/stalemates
 fn get_end_condition(board: &Board, att_table: &AttackTable) -> i32 {
     if att_table.king_in_check(board) {
-        match board.turn_colour {
-            Colour::White => return -CHECKMATE,
-            Colour::Black => return CHECKMATE,
-        }
+        return -CHECKMATE;
     } else {
         return DRAW;
     }

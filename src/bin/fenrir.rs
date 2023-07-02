@@ -27,6 +27,7 @@ fn main() {
     let mut engine = Engine::new(fen);
     loop {
         println!("{engine}");
+        println!("Eval = {}", engine.eval());
         match engine.get_game_state() {
             GameState::WhiteVictory => { println!("Game over: White wins"); break; },
             GameState::BlackVictory => { println!("Game over: Black wins"); break; },
@@ -72,6 +73,8 @@ fn main() {
             let best_move = best_move.unwrap();
             println!("Best move = {} with eval = {eval} at depth {depth_searched}. Found in {} seconds", move_string(&best_move), duration);
             engine.make_move(best_move);
+        } else if input == "eval" {
+            println!("Eval = {}", engine.eval());
         } else {
             let chess_move = match engine.string_to_move(&input) {
                 Ok(m) => m,
