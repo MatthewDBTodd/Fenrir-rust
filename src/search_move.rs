@@ -133,14 +133,28 @@ fn negamax(board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha:
             }
         }
     }
+
+    // can check for threefold before checking for checkmate as you can't repeat
+    // a checkmate position
+    if board.is_threefold_repetition() {
+        return Some(DRAW);
+    }
     if depth == 0 {
         return Some(eval_position(board, attack_table));
     }
+
     let mut move_list = [Move::default(); 256];
     let num_moves = attack_table.generate_legal_moves(board, board.turn_colour, &mut move_list);
+    // game is over, either checkmate or stalemate
     if num_moves == 0 {
-        return Some(get_end_condition(board, attack_table));
+        return Some(-get_end_condition(board, attack_table));
     }
+    // we check for the fifty move rule after checking for checkmate/stalemate just incase
+    // the fiftieth move is a checkmate
+    if board.half_move_num >= 50 {
+        return Some(DRAW);
+    }
+
     let mut value = i32::MIN + 1;
     let mut best_idx: Option<usize> = None;
     for i in 0..num_moves {
@@ -155,6 +169,7 @@ fn negamax(board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha:
         }
         value = cmp::max(value, -rv.unwrap());
         if value == CHECKMATE {
+            println!("found checkmate brah");
             return Some(CHECKMATE);
         }
         // alpha = cmp::max(alpha, value);
@@ -193,6 +208,7 @@ fn negamax(board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha:
     Some(value)
 }
 
+// check for checkmates/stalemates
 fn get_end_condition(board: &Board, att_table: &AttackTable) -> i32 {
     if att_table.king_in_check(board) {
         match board.turn_colour {

@@ -37,7 +37,9 @@ pub enum GameState {
     Ongoing,
     WhiteVictory,
     BlackVictory,
-    Draw,
+    Stalemate,
+    ThreefoldRepetition,
+    FiftyMoveRule,
 }
 
 
@@ -138,8 +140,12 @@ impl Engine {
                     Colour::Black => return GameState::WhiteVictory,
                 }
             } else {
-                return GameState::Draw;
+                return GameState::Stalemate;
             }
+        } else if self.board.is_threefold_repetition() {
+            return GameState::ThreefoldRepetition;
+        }  else if self.board.half_move_num >= 50 {
+            return GameState::FiftyMoveRule;
         } else {
             return GameState::Ongoing;
         }

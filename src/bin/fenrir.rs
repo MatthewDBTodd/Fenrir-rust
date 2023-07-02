@@ -27,16 +27,13 @@ fn main() {
     let mut engine = Engine::new(fen);
     loop {
         println!("{engine}");
-        let game_state = engine.get_game_state();
-        if game_state == GameState::WhiteVictory {
-            println!("Game over: White wins");
-            break;
-        } else if game_state == GameState::BlackVictory {
-            println!("Game over: Black wins");
-            break;
-        } else if game_state == GameState::Draw {
-            println!("Game over: Draw");
-            break;
+        match engine.get_game_state() {
+            GameState::WhiteVictory => { println!("Game over: White wins"); break; },
+            GameState::BlackVictory => { println!("Game over: Black wins"); break; },
+            GameState::Stalemate => { println!("Game over: Draw due to stalemate"); break; },
+            GameState::ThreefoldRepetition => { println!("Game over: Draw due to threefold repetition"); break; },
+            GameState::FiftyMoveRule => { println!("Game over: Draw due to 50 move rule"); break; },
+            _ => (),
         }
 
         let input = get_user_input();

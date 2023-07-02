@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use crate::bitboard::*;
 use crate::board_hash::ZobristHasher;
@@ -19,6 +20,11 @@ pub struct Board {
     pub move_history: Vec<SavedMove>,
     pub board_hash: u64,
     pub hasher: Arc<ZobristHasher>,
+    // zobrist hashes of previous positions for detecting threefold repetition. 
+    // We can clear it when a capture or pawn move happens, as they are 
+    // irreversible so make it impossible for positions before then to repeat.
+    // But as it won't affect the lookup time in a hash-table for now I won't bother.
+    pub prev_positions: HashMap<u64, u8>, 
 }
 
 // ignore move_history and board_hash
@@ -68,9 +74,12 @@ impl Board {
             move_history: Vec::new(),
             board_hash: 0,
             hasher,
+            prev_positions: HashMap::new(),
         };
 
         board.board_hash = board.hasher.hash_board(&board);
+
+        board.prev_positions.entry(board.board_hash).and_modify(|n| *n += 1).or_insert(1);
         Ok(board)
     }
     
@@ -245,12 +254,23 @@ impl Board {
 
         self.board_hash = self.hasher.update_hash(&self, &saved_move);
         self.move_history.push(saved_move);
+
+        self.prev_positions.entry(self.board_hash).and_modify(|n| *n += 1).or_insert(1);
     }
     
     pub fn undo_move(&mut self) {
         let Some(saved_move) = self.move_history.pop() else {
             return;
         };
+
+        if let Some(count) = self.prev_positions.get_mut(&self.board_hash) {
+            *count -= 1;
+            if *count == 0 {
+                self.prev_positions.remove(&self.board_hash);
+            }
+        } else {
+            panic!("position not found in prev_positions");
+        }
 
         self.board_hash = self.hasher.update_hash(&self, &saved_move);
         
@@ -334,6 +354,10 @@ impl Board {
             self.move_num
         };
 
+    }
+
+    pub fn is_threefold_repetition(&self) -> bool {
+        self.prev_positions.get(&self.board_hash).unwrap() >= &3
     }
     
     fn make_quiet_move(&mut self, colour: Colour, source_sq: Square, dest_sq: Square, piece: Piece) {
