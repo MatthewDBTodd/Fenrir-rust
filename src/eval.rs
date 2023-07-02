@@ -103,7 +103,7 @@ fn pawn_eval(board: &Board, colour: Colour) -> (u32, u32) {
         let pawn = pawns_tmp & pawns_tmp.wrapping_neg();
         pawns_tmp ^= pawn;
         let idx = pawn.trailing_zeros() as usize;
-        let pawns_on_file = pawn & FILES[idx];
+        let pawns_on_file = pawns & FILES[idx];
         pawns_tmp = pawns_tmp & !pawns_on_file;
         let num_pawns_on_file = pawns_on_file.count_ones();
         doubled_pawns += num_pawns_on_file - 1;
@@ -296,3 +296,28 @@ const ISOLATED: [u64; 64] = [
     0x202020202020202, 0x505050505050505, 0xa0a0a0a0a0a0a0a, 0x1414141414141414,
     0x2828282828282828, 0x5050505050505050, 0xa0a0a0a0a0a0a0a0, 0x4040404040404040,
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::board_hash::ZobristHasher;
+    use std::sync::Arc;
+
+    #[test]
+    fn test_pawn_eval_white() {
+        let hasher = Arc::new(ZobristHasher::new());
+        let board = Board::new(Some("3k4/8/8/8/5P1P/2P4P/2P4P/3K4 w - - 0 1"), hasher.clone()).unwrap();
+        let (doubled, isolated) = pawn_eval(&board, Colour::White);
+        assert_eq!(3, doubled);
+        assert_eq!(6, isolated);
+    }
+
+    #[test]
+    fn test_pawn_eval_black() {
+        let hasher = Arc::new(ZobristHasher::new());
+        let board = Board::new(Some("3k4/p1p5/1p2p3/2p5/7p/8/8/3K4 w - - 0 1"), hasher.clone()).unwrap();
+        let (doubled, isolated) = pawn_eval(&board, Colour::Black);
+        assert_eq!(1, doubled);
+        assert_eq!(2, isolated);
+    }
+}
