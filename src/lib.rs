@@ -15,6 +15,7 @@ pub mod board_hash;
 pub mod engine;
 pub mod transposition_table;
 pub mod eval;
+pub mod pgn;
 
 // #[cfg(test)]
 pub mod test_helpers;
