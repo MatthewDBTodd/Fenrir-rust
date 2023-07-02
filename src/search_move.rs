@@ -22,23 +22,12 @@ pub fn search_position(
 
     let mut best_move: Move = Move::default();
     let mut best_eval: i32 = i32::MIN + 1;
-    // let mut best_index = usize::MAX;
-    // let mut move_list = [Move::default(); 256];
-    // let mut board = board.lock().unwrap();
-    // let num_moves = attack_table.generate_legal_moves(&board, board.turn_colour, &mut move_list);
 
-    // if num_moves == 0 {
-    //     return (None, get_end_condition(&board, &attack_table), 0);
-    // }
     if legal_moves.num == 0 {
         panic!("This should not have happened");
     }
     println!("checking {} moves...", legal_moves.num);
 
-    // let mut prev_num_nodes: u64 = 1;
-
-    // let mut alpha: i32 = i32::MIN + 1;
-    // let mut beta: i32 = i32::MAX;
     let mut current_depth = 1;
     'outer: while current_depth <= max_depth {
         if stop_flag.load(Ordering::Relaxed) {
@@ -82,7 +71,6 @@ pub fn search_position(
         }
         best_move = current_best_move;
         best_eval = current_best_eval;
-        // best_index = current_best_index;
         println!("Depth {current_depth}: {} with eval {best_eval}", move_string(&best_move));
         for i in (1..=current_best_index).rev() {
             legal_moves.move_list.swap(i-1, i);
@@ -91,7 +79,6 @@ pub fn search_position(
         unsafe {
             let bf = branching_factor(NODES_VISITED, current_depth);
             println!("branching factor = {}", bf);
-            // prev_num_nodes = nodes_visited;
             NODES_VISITED = 0;
         }
         current_depth += 1;
@@ -117,13 +104,10 @@ fn negamax(board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha:
             };
             if entry.depth_searched as u32 >= depth {
                 if entry.flag == ResultFlag::Exact {
-                    // println!("exact match found!");
                     return Some(entry.eval);
                 } else if entry.flag == ResultFlag::LowerBound {
-                    // println!("lower bound found");
                     alpha = cmp::max(alpha, entry.eval);
                 } else if entry.flag == ResultFlag::UpperBound {
-                    // println!("upper bound found");
                     beta = cmp::min(beta, entry.eval);
                 }
 
@@ -171,7 +155,6 @@ fn negamax(board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha:
         if value == CHECKMATE {
             return Some(CHECKMATE);
         }
-        // alpha = cmp::max(alpha, value);
         if value > alpha {
             alpha = value;
             best_idx = Some(i);

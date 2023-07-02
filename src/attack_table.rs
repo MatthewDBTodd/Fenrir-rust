@@ -141,7 +141,11 @@ impl AttackTable {
     }
 
     // we ignore promotions and en_passant for speed, this is meant to be a rough count
-    pub fn get_num_legal_moves(&self, board: &Board, colour: Colour) -> u32 {
+    // so we can quickly discount there being zero legal moves. If this returns > 0 we
+    // know there's at least 1 legal move. If it returns 0 then we need to do a proper
+    // check via generate_legal_moves which is more expensive, but means we only need
+    // to do that when this returns 0
+    pub fn get_approx_num_legal_moves(&self, board: &Board, colour: Colour) -> u32 {
         let board_status = self.get_board_status(&board.bitboard, colour);
         let occupied = board.bitboard.get_entire_mask();
         let friendly_pieces = board.bitboard.get_colour_mask(colour);

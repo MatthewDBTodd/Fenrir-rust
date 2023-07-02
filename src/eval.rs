@@ -4,22 +4,13 @@ pub const CHECKMATE: i32 = 100_000;
 pub const DRAW: i32 = 0;
 
 pub fn eval_position(board: &Board, attack_table: &AttackTable) -> i32 {
-    // let mut move_list = [Move::default(); 256];
-    // let white_legal_moves = attack_table.generate_legal_moves(board, Colour::White, &mut move_list);
-    // let black_legal_moves = attack_table.generate_legal_moves(board, Colour::Black, &mut move_list);
-    // println!("----------------------------------------------------");
-    // println!("BOARD EVAL");
-    // println!("{}", board);
-    let white_rough_moves = attack_table.get_num_legal_moves(board, Colour::White);
-    let black_rough_moves = attack_table.get_num_legal_moves(board, Colour::Black);
-    // println!("white legal/rough = {} {}", white_legal_moves, white_rough_moves);
-    // println!("black legal/rough = {} {}", black_legal_moves, black_rough_moves);
+    let white_rough_moves = attack_table.get_approx_num_legal_moves(board, Colour::White);
+    let black_rough_moves = attack_table.get_approx_num_legal_moves(board, Colour::Black);
     if board.turn_colour == Colour::White && white_rough_moves == 0 {
         // hack for now, there may actually be a legal en_passant, have to check for that
         let mut move_list = [Move::default(); 256];
         let legal_moves = attack_table.generate_legal_moves(board, Colour::White, &mut move_list);
         if legal_moves == 0 && attack_table.king_in_check(board) {
-            // println!("white in checkmate in eval_position");
             return -CHECKMATE;
         } else if legal_moves == 0 {
             return DRAW;
@@ -29,7 +20,6 @@ pub fn eval_position(board: &Board, attack_table: &AttackTable) -> i32 {
         let mut move_list = [Move::default(); 256];
         let legal_moves = attack_table.generate_legal_moves(board, Colour::Black, &mut move_list);
         if legal_moves == 0 && attack_table.king_in_check(board) {
-            // println!("black in checkmate in eval_position");
             return -CHECKMATE;
         } else if legal_moves == 0 {
             return DRAW;
@@ -65,31 +55,22 @@ pub fn eval_position(board: &Board, attack_table: &AttackTable) -> i32 {
         }
 
         let val = weight * (white_count as i32 - black_count as i32);
-        // println!("{:?} {} * ({} - {}) = {}", piece_type, weight, white_count, black_count, val);
         eval += val;
-        // eval += weight * (white_count as i32 - black_count as i32);
     }
 
     let val = w_pst_eval - b_pst_eval;
     eval += val;
-    // println!("\nmobility:");
     let val = 10 * (white_rough_moves as i32 - black_rough_moves as i32);
-    // println!("10 * ({} - {}) = {}", white_rough_moves, black_rough_moves, val);
     eval += val;
-    // eval += 10 * (white_rough_moves as i32 - black_rough_moves as i32);
 
     let (w_doubled, w_isolated) = pawn_eval(board, Colour::White);
     let (b_doubled, b_isolated) = pawn_eval(board, Colour::Black);
-    // let pawns = 5 * ((w_doubled - b_doubled) + (w_isolated - b_isolated)) as i32;
     let pawns = 50 * ((w_doubled - b_doubled) + (w_isolated - b_isolated)) as i32;
-    // println!("\npawns:");
-    // println!("5 * (({} - {}) + ({} - {})) = {}", w_doubled, b_doubled, w_isolated, b_isolated, pawns);
     eval += pawns;
     eval = match board.turn_colour {
         Colour::White => 1 * eval,
         Colour::Black => -1 * eval,
     };
-    // println!("\nFinal eval = {}", eval);
     eval
 }
 
