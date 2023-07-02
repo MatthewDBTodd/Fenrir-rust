@@ -8,6 +8,8 @@ use crate::chess_move::{Move, MoveType};
 use crate::bitboard::BitBoard;
 include!("blocker_table.rs");
 
+// use crate::test_helpers::bitmask_to_board;
+
 pub struct AttackTable {
     king: Vec<u64>,
     knight: Vec<u64>,
@@ -100,7 +102,9 @@ impl AttackTable {
 
         let mut moves = MoveList::new(moves);
         let board_status = self.get_board_status(&board.bitboard, friendly_colour,);
-        
+
+        // println!("{}", bitmask_to_board(board_status.pinned_pieces));
+
         // first check if king is in double check
         // means we only generate king moves
         if board_status.num_checking_pieces == 2 {
@@ -925,6 +929,10 @@ impl AttackTable {
                 while all_pieces != 0 {
                     let one_piece = all_pieces & all_pieces.wrapping_neg();
                     all_pieces ^= one_piece;
+
+                    if one_piece & board_status.pinned_pieces != 0 {
+                        continue;
+                    }
                     let mut piece_moves = self.get_single_piece_moves(
                         piece_type,
                         board_status.friendly_colour,

@@ -169,7 +169,6 @@ fn negamax(board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha:
         }
         value = cmp::max(value, -rv.unwrap());
         if value == CHECKMATE {
-            println!("found checkmate brah");
             return Some(CHECKMATE);
         }
         // alpha = cmp::max(alpha, value);

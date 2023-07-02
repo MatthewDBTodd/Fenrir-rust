@@ -19,6 +19,7 @@ pub fn eval_position(board: &Board, attack_table: &AttackTable) -> i32 {
         let mut move_list = [Move::default(); 256];
         let legal_moves = attack_table.generate_legal_moves(board, Colour::White, &mut move_list);
         if legal_moves == 0 && attack_table.king_in_check(board) {
+            // println!("white in checkmate in eval_position");
             return -CHECKMATE;
         } else if legal_moves == 0 {
             return DRAW;
@@ -28,6 +29,7 @@ pub fn eval_position(board: &Board, attack_table: &AttackTable) -> i32 {
         let mut move_list = [Move::default(); 256];
         let legal_moves = attack_table.generate_legal_moves(board, Colour::Black, &mut move_list);
         if legal_moves == 0 && attack_table.king_in_check(board) {
+            // println!("black in checkmate in eval_position");
             return CHECKMATE;
         } else if legal_moves == 0 {
             return DRAW;
