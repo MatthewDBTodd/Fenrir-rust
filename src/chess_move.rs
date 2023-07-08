@@ -33,6 +33,13 @@ pub enum MoveType {
     // captured piece first, then promotion piece
     CapturePromotion(Piece, Piece), // done
     ErrorMove,
+    // WhiteCheckmatesBlack,
+    // BlackCheckmatesWhite,
+    // WhiteResigns,
+    // BlackResigns,
+    // StalemateDraw,
+    // ThreeMoveRepetitionDraw,
+    // FiftyMoveRuleDraw
 }
 
 impl Default for Move {

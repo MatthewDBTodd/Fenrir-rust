@@ -18,6 +18,7 @@ pub struct Engine {
     hasher: Arc<ZobristHasher>,
     transposition_table: Arc<Mutex<TranspositionTable>>,
     legal_moves: LegalMoves,
+    pgn_move_history: Vec<String>,
 }
 
 #[derive(PartialEq)]
@@ -36,8 +37,8 @@ pub struct LegalMoves {
 #[derive(Debug, PartialEq)]
 pub enum GameState {
     Ongoing,
-    WhiteVictory,
-    BlackVictory,
+    WhiteCheckmatesBlack,
+    BlackCheckmatesWhite,
     Stalemate,
     ThreefoldRepetition,
     FiftyMoveRule,
@@ -72,6 +73,7 @@ impl Engine {
             hasher,
             transposition_table,
             legal_moves,
+            pgn_move_history: Vec::new(),
         }
     }
 
@@ -137,8 +139,8 @@ impl Engine {
         if self.legal_moves.num == 0 {
             if self.attack_table.king_in_check(&self.board) {
                 match self.board.turn_colour {
-                    Colour::White => return GameState::BlackVictory,
-                    Colour::Black => return GameState::WhiteVictory,
+                    Colour::White => return GameState::BlackCheckmatesWhite,
+                    Colour::Black => return GameState::WhiteCheckmatesBlack,
                 }
             } else {
                 return GameState::Stalemate;

@@ -29,8 +29,8 @@ fn main() {
         println!("{engine}");
         println!("Eval = {}", engine.eval());
         match engine.get_game_state() {
-            GameState::WhiteVictory => { println!("Game over: White wins"); break; },
-            GameState::BlackVictory => { println!("Game over: Black wins"); break; },
+            GameState::WhiteCheckmatesBlack => { println!("Game over: White wins"); break; },
+            GameState::BlackCheckmatesWhite => { println!("Game over: Black wins"); break; },
             GameState::Stalemate => { println!("Game over: Draw due to stalemate"); break; },
             GameState::ThreefoldRepetition => { println!("Game over: Draw due to threefold repetition"); break; },
             GameState::FiftyMoveRule => { println!("Game over: Draw due to 50 move rule"); break; },
