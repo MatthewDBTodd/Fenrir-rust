@@ -19,6 +19,7 @@ fn get_user_input(quiet: bool) -> String {
 }
 
 fn play_game(engine: &mut Engine, quiet: bool) -> bool {
+    let mut first_move = true;
     loop {
         if !quiet {
             println!("{engine}");
@@ -65,7 +66,12 @@ fn play_game(engine: &mut Engine, quiet: bool) -> bool {
                     println!("Game over: Draw due to 50 move rule"); break; 
                 }
             },
-            _ => (),
+            GameState::Ongoing => {
+                if quiet && !first_move {
+                    println!("ok");
+                    first_move = false;
+                }
+            },
         }
 
         let input = get_user_input(quiet);
