@@ -26,8 +26,8 @@ pub fn eval_position(board: &Board, attack_table: &AttackTable) -> i32 {
         }
     }
     let mut eval: i32 = 0;
-    let mut w_pst_eval = 0;
-    let mut b_pst_eval = 0;
+    // let mut w_pst_eval = 0;
+    // let mut b_pst_eval = 0;
     for (piece_type, weight) in [
         (Piece::Queen, 900),
         (Piece::Rook, 500),
@@ -35,31 +35,31 @@ pub fn eval_position(board: &Board, attack_table: &AttackTable) -> i32 {
         (Piece::Knight, 320),
         (Piece::Pawn, 100),
     ] {
-        let mut white_pieces = board.bitboard.get_colour_piece_mask(piece_type, Colour::White);
+        let white_pieces = board.bitboard.get_colour_piece_mask(piece_type, Colour::White);
         let white_count = white_pieces.count_ones();
-        while white_pieces != 0 {
-            let white_piece = white_pieces & white_pieces.wrapping_neg();
-            white_pieces ^= white_piece;
+        // while white_pieces != 0 {
+        //     let white_piece = white_pieces & white_pieces.wrapping_neg();
+        //     white_pieces ^= white_piece;
 
-            w_pst_eval += PIECE_SQUARE_TABLES[Colour::White as usize][piece_type as usize][white_piece.trailing_zeros() as usize];
-        }
+        //     w_pst_eval += PIECE_SQUARE_TABLES[Colour::White as usize][piece_type as usize][white_piece.trailing_zeros() as usize];
+        // }
 
 
-        let mut black_pieces = board.bitboard.get_colour_piece_mask(piece_type, Colour::Black);
+        let black_pieces = board.bitboard.get_colour_piece_mask(piece_type, Colour::Black);
         let black_count = black_pieces.count_ones();
-        while black_pieces != 0 {
-            let black_piece = black_pieces & black_pieces.wrapping_neg();
-            black_pieces ^= black_piece;
+        // while black_pieces != 0 {
+        //     let black_piece = black_pieces & black_pieces.wrapping_neg();
+        //     black_pieces ^= black_piece;
 
-            b_pst_eval += PIECE_SQUARE_TABLES[Colour::Black as usize][piece_type as usize][black_piece.trailing_zeros() as usize];
-        }
+        //     b_pst_eval += PIECE_SQUARE_TABLES[Colour::Black as usize][piece_type as usize][black_piece.trailing_zeros() as usize];
+        // }
 
         let val = weight * (white_count as i32 - black_count as i32);
         eval += val;
     }
 
-    let val = w_pst_eval - b_pst_eval;
-    eval += val;
+    // let val = w_pst_eval - b_pst_eval;
+    // eval += val;
     let val = 10 * (white_rough_moves as i32 - black_rough_moves as i32);
     eval += val;
 
@@ -96,6 +96,7 @@ fn pawn_eval(board: &Board, colour: Colour) -> (i32, i32) {
     (doubled_pawns, isolated_pawns)
 }
 
+/* 
 // indexed by [colour][piece][square]
 #[rustfmt::skip]
 const PIECE_SQUARE_TABLES: [[[i32; 64]; 6]; 2] = [
@@ -238,6 +239,7 @@ const PIECE_SQUARE_TABLES: [[[i32; 64]; 6]; 2] = [
         ]
     ]
 ];
+*/
 
 #[rustfmt::skip]
 const FILES: [u64; 64] = [
