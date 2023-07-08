@@ -67,9 +67,10 @@ fn play_game(engine: &mut Engine, quiet: bool) -> bool {
                 }
             },
             GameState::Ongoing => {
-                if quiet && !first_move {
-                    println!("ok");
+                if first_move {
                     first_move = false;
+                } else if quiet && !first_move {
+                    println!("ok");
                 }
             },
         }
