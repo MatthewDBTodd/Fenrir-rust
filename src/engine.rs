@@ -133,7 +133,10 @@ impl Engine {
         self.legal_moves.num = n;
     }
 
-    pub fn search_position(&mut self, search_method: SearchMethod,) -> (Option<Move>, i32, u32) {
+    pub fn search_position(
+        &mut self, search_method: SearchMethod, quiet: bool
+    ) -> (Option<Move>, i32, u32) 
+    {
         let legal_moves = self.legal_moves.clone();
         let stop_searching = Arc::new(AtomicBool::new(false));
         let stop_flag = stop_searching.clone();
@@ -154,6 +157,7 @@ impl Engine {
             depth, 
             tt,
             pair2,
+            quiet,
         ));
         if let SearchMethod::ToTime(time) = search_method {
             let guard = pair.0.lock().unwrap();

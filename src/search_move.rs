@@ -18,6 +18,7 @@ pub fn search_position(
     max_depth: u32,
     tt: Arc<Mutex<TranspositionTable>>,
     cv: Arc<(Mutex<()>, Condvar)>,
+    quiet: bool,
 ) -> (Option<Move>, i32, u32) /* (move, eval, depth-reached) */ {
 
     let mut best_move: Move = Move::default();
@@ -26,7 +27,9 @@ pub fn search_position(
     if legal_moves.num == 0 {
         panic!("This should not have happened");
     }
-    println!("checking {} moves...", legal_moves.num);
+    if !quiet {
+        println!("checking {} moves...", legal_moves.num);
+    }
 
     let mut current_depth = 1;
     'outer: while current_depth <= max_depth {
@@ -57,7 +60,9 @@ pub fn search_position(
                 break 'outer;
             }
             let e = -e.unwrap();
-            println!("{:?} -> {e}", legal_moves.move_list[i]);
+            if !quiet {
+                println!("{:?} -> {e}", legal_moves.move_list[i]);
+            }
             if e > current_best_eval {
                 current_best_move = legal_moves.move_list[i];
                 current_best_eval = e;
@@ -71,15 +76,19 @@ pub fn search_position(
         }
         best_move = current_best_move;
         best_eval = current_best_eval;
-        println!("Depth {current_depth}: {} with eval {best_eval}", move_string(&best_move));
+        if !quiet {
+            println!("Depth {current_depth}: {} with eval {best_eval}", move_string(&best_move));
+        }
         for i in (1..=current_best_index).rev() {
             legal_moves.move_list.swap(i-1, i);
         }
 
-        unsafe {
-            let bf = branching_factor(NODES_VISITED, current_depth);
-            println!("branching factor = {}", bf);
-            NODES_VISITED = 0;
+        if !quiet {
+            unsafe {
+                let bf = branching_factor(NODES_VISITED, current_depth);
+                println!("branching factor = {}", bf);
+                NODES_VISITED = 0;
+            }
         }
         current_depth += 1;
     }

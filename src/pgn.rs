@@ -99,7 +99,7 @@ pub fn generate_move_notation(chess_move: &Move, legal_moves: Vec<Move>,
     rv
 }
 
-fn file_string(file: usize) -> String {
+pub fn file_string(file: usize) -> String {
     match file {
         0 => "a".to_string(),
         1 => "b".to_string(),
@@ -113,7 +113,7 @@ fn file_string(file: usize) -> String {
     }
 }
 
-fn rank_string(rank: usize) -> String {
+pub fn rank_string(rank: usize) -> String {
     match rank {
         0 => "1".to_string(),
         1 => "2".to_string(),
