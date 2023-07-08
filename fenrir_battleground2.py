@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 import subprocess
 import sys
+import select
 
 @dataclass
 class EngineStats:
@@ -24,6 +25,7 @@ def main():
     
     engine1_path = sys.argv[1]
     engine2_path = sys.argv[2]
+    ms = int(sys.argv[3])
 
     engine1 = subprocess.Popen(
         [engine1_path, "-q"],
@@ -41,7 +43,11 @@ def main():
 
     engines = [engine1, engine2]
 
-    current_engine = 0
+    white_idx, black_idx = 0, 1
+
+    current_turn_idx, other_turn_idx = white_idx, black_idx
+
+
 
 
     engine1_version = engine1.stdout.readline().strip()
@@ -51,8 +57,45 @@ def main():
 
     scores = [EngineStats(name=engine1_version), EngineStats(name=engine2_version)]
 
-    print(scores)
+    while True:
+        engines[current_turn_idx].stdin.write(f"search time {ms}\n")
+        engines[current_turn_idx].stdin.flush()
+        move = engines[current_turn_idx].stdout.readline().strip()
+        print(f"move = {move}")
+        engines[other_turn_idx].stdin.write(f"{move}\n")
+        engines[other_turn_idx].stdin.flush()
 
+        reads, _, _ = select.select([engines[other_turn_idx].stdout], [], [], 0.2)
+
+        if reads:
+            # There's something to read, so read a line
+            line = engines[other_turn_idx].stdout.readline()
+            parts = line.split(":")
+            print(parts)
+            if len(parts) == 2 and parts[0] == "Game over":
+                print("game is over")
+                code = int(parts[1].strip())
+                print(f"code = {code}")
+
+                if code == WHITE_WIN_CODE:
+                    scores[white_idx].wins += 1
+                    scores[black_idx].losses += 1
+                elif code == BLACK_WIN_CODE:
+                    scores[black_idx].wins += 1
+                    scores[white_idx].losses += 1
+                elif code == STALEMATE_CODE or code == THREEFOLD_CODE or code == FIFTYMOVE_CODE:
+                    scores[white_idx].draws += 1
+                    scores[black_idx].draws += 1
+            
+            print("asdf")
+            pgn = engines[other_turn_idx].stdout.readline()
+            print("asdfsdaf")
+            print(pgn)
+            break
+
+        current_turn_idx, other_turn_idx = other_turn_idx, current_turn_idx
+
+    print(scores)
 
     # Clean up the subprocesses
     for engine in engines:

@@ -28,6 +28,7 @@ fn play_game(engine: &mut Engine, quiet: bool) -> bool {
             GameState::WhiteCheckmatesBlack => { 
                 if quiet {
                     println!("Game over: {}", GameState::WhiteCheckmatesBlack as usize);
+                    break;
                 } else {
                     println!("Game over: White wins"); break; 
                 }
@@ -35,6 +36,7 @@ fn play_game(engine: &mut Engine, quiet: bool) -> bool {
             GameState::BlackCheckmatesWhite => { 
                 if quiet {
                     println!("Game over: {}", GameState::BlackCheckmatesWhite as usize);
+                    break;
                 } else {
                     println!("Game over: Black wins"); break; 
                 }
@@ -42,6 +44,7 @@ fn play_game(engine: &mut Engine, quiet: bool) -> bool {
             GameState::Stalemate => { 
                 if quiet {
                     println!("Game over: {}", GameState::Stalemate as usize);
+                    break;
                 } else {
                     println!("Game over: Draw due to stalemate"); break; 
                 }
@@ -49,6 +52,7 @@ fn play_game(engine: &mut Engine, quiet: bool) -> bool {
             GameState::ThreefoldRepetition => { 
                 if quiet {
                     println!("Game over: {}", GameState::ThreefoldRepetition as usize);
+                    break;
                 } else {
                     println!("Game over: Draw due to threefold repetition"); break; 
                 }
@@ -56,6 +60,7 @@ fn play_game(engine: &mut Engine, quiet: bool) -> bool {
             GameState::FiftyMoveRule => { 
                 if quiet {
                     println!("Game over: {}", GameState::FiftyMoveRule as usize);
+                    break;
                 } else {
                     println!("Game over: Draw due to 50 move rule"); break; 
                 }
