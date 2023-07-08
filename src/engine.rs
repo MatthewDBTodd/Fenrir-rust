@@ -11,6 +11,7 @@ use crate::search_move::*;
 use crate::shared_perft::*;
 use crate::transposition_table::TranspositionTable;
 use crate::Colour;
+use crate::pgn::*;
 
 pub struct Engine {
     board: Board,
@@ -77,6 +78,19 @@ impl Engine {
         }
     }
 
+    pub fn new_game(&mut self, fen: Option<&str>) {
+        let board = Board::new(fen, self.hasher.clone()).unwrap();
+
+        let num = self.attack_table.generate_legal_moves(
+            &board, board.turn_colour, &mut self.legal_moves.move_list
+        );
+        self.legal_moves.num = num;
+        let transposition_table = Arc::new(Mutex::new(TranspositionTable::new(1 << 20)));
+        self.transposition_table = transposition_table;
+        self.board = board;
+        self.pgn_move_history.clear();
+    }
+
     pub fn input_start_pos(&mut self, fen: &str) {
         let new_board = Board::new(Some(fen), self.hasher.clone()).unwrap();
         self.board = new_board;
@@ -88,13 +102,28 @@ impl Engine {
     }
 
     pub fn make_move(&mut self, chess_move: Move) {
+        let legal_moves: Vec<Move> = self.legal_moves.move_list[0..self.legal_moves.num]
+            .to_vec();
         self.board.make_move(chess_move);
         self.generate_legal_moves();
+        let move_state = if self.attack_table.king_in_check(&self.board) {
+            if self.legal_moves.num == 0 {
+                Some(MoveState::Checkmate)
+            } else {
+                Some(MoveState::Check)
+            }
+        } else {
+            None
+        };
+        self.pgn_move_history.push(
+            generate_move_notation(&chess_move, legal_moves, move_state)
+        );
     }
 
     pub fn undo_move(&mut self) {
         self.board.undo_move();
         self.generate_legal_moves();
+        self.pgn_move_history.pop();
     }
 
     fn generate_legal_moves(&mut self) {
@@ -168,6 +197,22 @@ impl Engine {
 
     pub fn eval(&self) -> i32 {
         eval_position(&self.board, &self.attack_table)
+    }
+
+    pub fn generate_pgn_moves(&self) -> String {
+        let mut rv = String::new();
+        let mut move_num = 1;
+        for i in 0..self.pgn_move_history.len() {
+            if i % 2 == 0 {
+                rv.push_str(&move_num.to_string());
+                rv.push_str(&". ");
+                move_num += 1;
+            }
+
+            rv.push_str(&self.pgn_move_history[i]);
+            rv.push(' ');
+        }
+        rv
     }
 }
 

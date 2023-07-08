@@ -87,4 +87,23 @@ fn main() {
             engine.make_move(chess_move);
         }
     }
+    let mut pgn_moves = engine.generate_pgn_moves();
+    match engine.get_game_state() {
+        GameState::WhiteCheckmatesBlack => pgn_moves.push_str(&"1-0"),
+        GameState::BlackCheckmatesWhite => pgn_moves.push_str(&"0-1"),
+        GameState::Stalemate => {
+            pgn_moves.push_str(&"{ Draw due to stalemate } ");
+            pgn_moves.push_str(&"1/2-1/2");
+        },
+        GameState::ThreefoldRepetition => {
+            pgn_moves.push_str(&"{ Draw due to three-fold repetition } ");
+            pgn_moves.push_str(&"1/2-1/2");
+        },
+        GameState::FiftyMoveRule => {
+            pgn_moves.push_str(&"{ Draw due to fifty move rule } ");
+            pgn_moves.push_str(&"1/2-1/2");
+        },
+        _ => panic!("Invalid game state for pgn"),
+    }
+    println!("\n{}", pgn_moves);
 }

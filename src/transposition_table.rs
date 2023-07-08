@@ -76,4 +76,11 @@ impl TranspositionTable {
         };
         (rv, match_type)
     }
+
+    // pub fn reset(&mut self) {
+    //     for pair in self.entries.iter_mut() {
+    //         pair.depth_preferred.flag = ResultFlag::Empty;
+    //         pair.always_replace.flag = ResultFlag::Empty;
+    //     }
+    // }
 }

@@ -1,15 +1,14 @@
 use crate::Piece;
-use crate::board::Board;
-use crate::chess_move::{Move, SavedMove, MoveType};
-use crate::Square;
-use crate::engine::{LegalMoves, GameState};
+use crate::chess_move::{Move, MoveType};
+
+// TODO: import pgn
 
 pub enum MoveState {
     Check,
     Checkmate,
 }
 
-fn generate_move_notation(chess_move: &Move, legal_moves: Vec<Move>,
+pub fn generate_move_notation(chess_move: &Move, legal_moves: Vec<Move>,
                           move_state: Option<MoveState>) -> String 
 {
     let mut rv = String::new();
@@ -142,8 +141,7 @@ fn piece_character(piece: Piece) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::board_hash::ZobristHasher;
-    use std::sync::Arc;
+    use crate::Square;
 
     // For all these tests we don't pass in all the actual legal moves like we 
     // would normally, just ambiguous moves so we can just hardcode them without
