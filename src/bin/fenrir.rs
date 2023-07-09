@@ -6,7 +6,7 @@ use clap::{Command, Arg, ArgAction};
 use fenrir::engine::{Engine, SearchMethod, GameState};
 use fenrir::shared_perft::*;
 
-const VERSION: &str = "Fenrir 0.0001";
+const VERSION: &str = "Fenrir-0.0002";
 
 fn get_user_input(quiet: bool) -> String {
     let mut input = String::new();
@@ -138,6 +138,23 @@ fn play_game(engine: &mut Engine, quiet: bool) -> bool {
     false
 }
 
+fn get_fen(quiet: bool) -> Option<String> {
+    let fen = if !quiet {
+        println!("Enter starting position: ");
+        let fen = get_user_input(quiet);
+        let fen = if fen.is_empty() {
+            println!("Fen is empty, using starting position");
+            None
+        } else {
+            Some(fen.to_string())
+        };
+        fen
+    } else {
+        None
+    };
+    fen
+}
+
 fn main() {
     let cli = Command::new("fenrir")
         .about("Runs the Fenrir chess engine")
@@ -152,23 +169,9 @@ fn main() {
     
     let quiet = cli.get_flag("quiet");
 
-    // let fen = if !quiet {
-    //     println!("Enter starting position fen: ");
-    //     let fen = get_user_input();
-    //     let fen = if fen.is_empty() {
-    //         println!("Fen is empty, using starting position");
-    //         None
-    //     } else {
-    //         Some(&fen[..])
-    //     };
-    //     fen
-    // } else {
-    //     None
-    // };
+    let fen = get_fen(quiet);
 
-    let fen = None;
-
-    let mut engine = Engine::new(fen);
+    let mut engine = Engine::new(fen.as_deref());
     println!("{VERSION}");
     loop {
         let should_quit = play_game(&mut engine, quiet);
@@ -195,6 +198,7 @@ fn main() {
         if should_quit {
             break;
         }
-        engine.new_game(None);
+        let fen = get_fen(quiet);
+        engine.new_game(fen.as_deref());
     }
 }

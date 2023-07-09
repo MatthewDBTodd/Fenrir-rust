@@ -124,19 +124,25 @@ def play_game_instance(engines, scores, white_idx, black_idx, opening_name, open
             current_date = datetime.now()
             date_string = current_date.strftime("%Y.%m.%d")
             pgn_header += f"[Date \"{date_string}\"]\n"
-            pgn_header += "[White \"{}\"]\n".format(scores[white_idx].name)
-            pgn_header += "[Black \"{}\"]\n".format(scores[black_idx].name)
+
+            white_name = scores[white_idx].name
+            black_name = scores[black_idx].name
+            pgn_header += "[White \"{}\"]\n".format(white_name)
+            pgn_header += "[Black \"{}\"]\n".format(black_name)
             if code == WHITE_WIN_CODE:
-                pgn_header += "[Result \"1-0\"]\n"
+                pgn_header += "[Result \"1-0\"]\n\n"
             elif code == BLACK_WIN_CODE:
-                pgn_header += "[Result \"0-1\"]\n"
+                pgn_header += "[Result \"0-1\"]\n\n"
             else:
                 pgn_header += "[Result \"1/2-1/2\"]\n\n"
             
             pgn = pgn_header + pgn
 
             time_string = current_date.strftime("%Y.%m.%d-%H:%M:%S.pgn") 
-            with open(time_string, "w") as f:
+            white_name = white_name.replace(" ", "-")
+            black_name = black_name.replace(" ", "-")
+            filename = white_name + "_vs_" + black_name + "_" + time_string
+            with open(filename, "w") as f:
                 f.write(pgn) 
             print(scores)
             break
