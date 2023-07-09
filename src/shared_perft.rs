@@ -129,32 +129,29 @@ pub fn string_to_move(chess_move: &str, board: &Board) -> Result<Move, &'static 
         } else {
             MoveType::MovePromotion(promotion_piece)
         }
+    } else if piece == Piece::Pawn && board.en_passant.is_some() && dest_sq == board.en_passant.unwrap() {
+        let captured_pawn_square = match dest_sq {
+            Square::A3 => Square::A4,
+            Square::B3 => Square::B4,
+            Square::C3 => Square::C4,
+            Square::D3 => Square::D4,
+            Square::E3 => Square::E4,
+            Square::F3 => Square::F4,
+            Square::G3 => Square::G4,
+            Square::H3 => Square::H4,
+            Square::A6 => Square::A5,
+            Square::B6 => Square::B5,
+            Square::C6 => Square::C5,
+            Square::D6 => Square::D5,
+            Square::E6 => Square::E5,
+            Square::F6 => Square::F5,
+            Square::G6 => Square::G5,
+            Square::H6 => Square::H5,
+            _ => panic!("invalid en passant square"),
+        };
+        MoveType::EnPassant(captured_pawn_square)
     } else if captured_piece.is_some() {
-        if board.bitboard.square_empty(dest_sq) {
-            assert!(captured_piece.unwrap() == Piece::Pawn);
-            let captured_pawn_square = match dest_sq {
-                Square::A3 => Square::A4,
-                Square::B3 => Square::B4,
-                Square::C3 => Square::C4,
-                Square::D3 => Square::D4,
-                Square::E3 => Square::E4,
-                Square::F3 => Square::F4,
-                Square::G3 => Square::G4,
-                Square::H3 => Square::H4,
-                Square::A6 => Square::A5,
-                Square::B6 => Square::B5,
-                Square::C6 => Square::C5,
-                Square::D6 => Square::D5,
-                Square::E6 => Square::E5,
-                Square::F6 => Square::F5,
-                Square::G6 => Square::G5,
-                Square::H6 => Square::H5,
-                _ => panic!("invalid en passant square"),
-            };
-            MoveType::EnPassant(captured_pawn_square)
-        } else {
-            MoveType::Capture(captured_piece.unwrap())
-        }
+        MoveType::Capture(captured_piece.unwrap())
     } else if piece == Piece::Pawn {
         let source_mask: u64 = 1 << source_sq as u32;
         let dest_mask: u64 = 1 << dest_sq as u32;
