@@ -90,7 +90,7 @@ def play_game_instance(engines, scores, white_idx, black_idx, opening_name, open
         engines[current_turn_idx].stdin.write(f"search time {ms}\n")
         engines[current_turn_idx].stdin.flush()
         move = read_stdout(engines[current_turn_idx], 5.0)
-        print(f"{move}")
+        # print(f"{move}")
         engines[other_turn_idx].stdin.write(f"{move}\n")
         engines[other_turn_idx].stdin.flush()
 
