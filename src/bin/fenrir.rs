@@ -6,7 +6,9 @@ use clap::{Command, Arg, ArgAction};
 use fenrir::engine::{Engine, SearchMethod, GameState};
 use fenrir::shared_perft::*;
 
-const VERSION: &str = "Fenrir-0.0003";
+const VERSION: &str = "Fenrir-multithreaded";
+
+const NUM_THREADS: usize = 8;
 
 fn get_user_input(quiet: bool) -> String {
     let mut input = String::new();
@@ -112,7 +114,7 @@ fn play_game(engine: &mut Engine, quiet: bool) -> bool {
 
             let start = Instant::now();
 
-            let (best_move, eval, depth_searched) = engine.search_position(method, quiet);
+            let (best_move, eval, depth_searched) = engine.search_position(method, quiet, NUM_THREADS);
             let duration = start.elapsed().as_secs_f64();
             let best_move = best_move.unwrap();
             if quiet {
