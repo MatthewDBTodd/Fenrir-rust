@@ -141,7 +141,7 @@ def play_game_instance(engines, scores, white_idx, black_idx, opening_name, open
             time_string = current_date.strftime("%Y.%m.%d-%H:%M:%S.pgn") 
             white_name = white_name.replace(" ", "-")
             black_name = black_name.replace(" ", "-")
-            filename = white_name + "_vs_" + black_name + "_" + opening_name + "_" + time_string
+            filename = white_name + "_vs_" + black_name + "_" + time_string
             with open(filename, "w") as f:
                 f.write(pgn) 
             print(scores)
@@ -194,10 +194,7 @@ def main():
 
     engine1_score = scores[0].wins + (scores[0].draws * 0.5)
     engine2_score = scores[1].wins + (scores[1].draws * 0.5)
-    current_date = datetime.now()
-    time_string = current_date.strftime("%Y.%m.%d-%H:%M:%S.pgn") 
-    filename = engine1_version + "_vs_" + engine2_version + "_summary_" + time_string + ".txt"
-    with open(filename, "w") as f:
+    with open("summary.txt", "w") as f:
         f.write("{} {}-{} {}".format(scores[0].name, engine1_score, engine2_score, scores[1].name))
         f.write("\n\n")
         f.write("{} Summary:\n".format(scores[0].name))
