@@ -1,0 +1,9 @@
+0.0001 - basic engine with negamax, alpha-beta pruning, iterative deepening,
+transposition tables
+
+0.0002 - introduced very basic piece-square tables, though currently without
+separate ones for the endgame
+
+0.0003 - introduced a basic quiescence search which seems to have dramatically
+improved the strength of the engine. It beat v0.0002 47.5-14.5 with an elo
+gain of ~200
