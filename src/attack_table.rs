@@ -115,6 +115,15 @@ impl AttackTable {
             self.get_out_of_single_check(board, &mut moves, &board_status);
             return moves.num_moves;
         }
+
+        // Captures
+        self.get_captures(board, &mut moves, &board_status);
+        self.get_king_captures(&board, &mut moves, &board_status);
+
+        if let Some(ep_square) = board.en_passant {
+            self.get_en_passant_moves(ep_square, board, &mut moves, &board_status);
+        }
+        
         // We already know if reaching this point the king is not in check
         // then for kingside/queenside, if it's still enabled, then check if the
         // squares between the king and rook are empty, and that the intermediate squares are not
@@ -124,13 +133,6 @@ impl AttackTable {
         // and if the rooks ever move/are captured
         self.get_legal_castling_rights(board, &mut moves, &board_status);
         
-        if let Some(ep_square) = board.en_passant {
-            self.get_en_passant_moves(ep_square, board, &mut moves, &board_status);
-        }
-        
-        // Captures
-        self.get_captures(board, &mut moves, &board_status);
-        self.get_king_captures(&board, &mut moves, &board_status);
         
         // Quiet moves
         self.get_quiet_moves(&board, &mut moves, &board_status);

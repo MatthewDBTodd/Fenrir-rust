@@ -3,6 +3,7 @@ use crate::{board::Board, attack_table::AttackTable, chess_move::Move,};
 use crate::shared_perft::*;
 use crate::eval::{eval_position, DRAW, CHECKMATE};
 use crate::engine::LegalMoves;
+use crate::chess_move::MoveType;
 use std::cmp;
 use std::sync::Condvar;
 use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}};
@@ -95,9 +96,16 @@ pub fn search_position(
     (Some(best_move), best_eval, current_depth-1)
 }
 
-fn negamax(board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha: i32,
-           mut beta: i32, tt: &mut TranspositionTable, stop_flag: &AtomicBool) -> Option<i32> {
-
+fn negamax(
+    board: &mut Board, 
+    attack_table: &AttackTable, 
+    depth: u32, 
+    mut alpha: i32,
+    mut beta: i32, 
+    tt: &mut TranspositionTable, 
+    stop_flag: &AtomicBool
+) -> Option<i32> 
+{
     unsafe {
         NODES_VISITED += 1;
     }
@@ -133,7 +141,8 @@ fn negamax(board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha:
         return Some(DRAW);
     }
     if depth == 0 {
-        return Some(eval_position(board, attack_table));
+        // return Some(eval_position(board, attack_table));
+        return quiescence(board, attack_table, alpha, beta, tt, stop_flag);
     }
 
     let mut move_list = [Move::default(); 256];
@@ -197,6 +206,57 @@ fn negamax(board: &mut Board, attack_table: &AttackTable, depth: u32, mut alpha:
     };
 
     Some(value)
+}
+
+fn quiescence(
+    board: &mut Board, 
+    attack_table: &AttackTable, 
+    // depth: u32, 
+    mut alpha: i32,
+    beta: i32, 
+    tt: &mut TranspositionTable, 
+    stop_flag: &AtomicBool
+) -> Option<i32>
+{
+    let standing_pat = eval_position(&board, attack_table);
+    if standing_pat >= beta {
+        return Some(beta);
+    } else if alpha < standing_pat {
+        alpha = standing_pat;
+    }
+
+    let mut move_list = [Move::default(); 256];
+    let num_moves = attack_table.generate_legal_moves(board, board.turn_colour, &mut move_list);
+
+    let ignored_move_types = [
+        MoveType::Quiet,
+        MoveType::DoublePawnPush,
+        MoveType::CastleKingSide,
+        MoveType::CastleQueenSide,
+    ];
+    for i in 0..num_moves {
+        if stop_flag.load(Ordering::Relaxed) {
+            return None;
+        }
+        if ignored_move_types.contains(&move_list[i].move_type) {
+            break;
+        }
+        board.make_move(move_list[i]);
+        let eval = quiescence(board, attack_table, -beta, -alpha, tt, stop_flag);
+        if eval.is_none() {
+            return None;
+        }
+        let eval = -eval.unwrap();
+        board.undo_move();
+        
+        if eval >= beta {
+            return Some(beta);
+        }
+        if eval > alpha {
+            alpha = eval;
+        }
+    }
+    Some(alpha)
 }
 
 // check for checkmates/stalemates
