@@ -20,6 +20,7 @@ pub struct Engine {
     transposition_table: Arc<Mutex<TranspositionTable>>,
     legal_moves: LegalMoves,
     pgn_move_history: Vec<String>,
+    from_perspective: Colour,
 }
 
 #[derive(PartialEq)]
@@ -75,6 +76,7 @@ impl Engine {
             transposition_table,
             legal_moves,
             pgn_move_history: Vec::new(),
+            from_perspective: Colour::White,
         }
     }
 
@@ -203,6 +205,14 @@ impl Engine {
         eval_position(&self.board, &self.attack_table)
     }
 
+    pub fn flip_board(&mut self) {
+        if self.from_perspective == Colour::White {
+            self.from_perspective = Colour::Black;
+        } else {
+            self.from_perspective = Colour::White;
+        }
+    }
+
     pub fn generate_pgn_moves(&self) -> String {
         let mut rv = String::new();
         let mut move_num = 1;
@@ -222,6 +232,6 @@ impl Engine {
 
 impl fmt::Display for Engine {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "{}", self.board)
+        self.board.print(f, self.from_perspective)
     }
 }

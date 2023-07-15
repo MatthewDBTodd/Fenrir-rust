@@ -166,38 +166,63 @@ impl BitBoard {
         };
         char::from(PieceColour(piece, colour))
     }
-}
 
-fn get_square_mask(square: Square) -> u64 {
-    1u64 << (square as u32)
-}
-
-impl fmt::Display for BitBoard {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f)?;
-        let mut rank_idx = 64;
-        for rank in (1..9).rev() {
-            rank_idx -= 8;
+    pub fn print(&self, f: &mut fmt::Formatter, from_perspective: Colour) -> fmt::Result {
+        if from_perspective == Colour::White {
+            writeln!(f)?;
+            let mut rank_idx = 64;
+            for rank in (1..9).rev() {
+                rank_idx -= 8;
+                write!(f, "   ")?;
+                for _ in 0..8 {
+                    write!(f, "+---")?;
+                }
+                writeln!(f)?;
+                write!(f, " {rank} ")?;
+                for file in 0..8 {
+                    let c = self.get_square_char(Square::from_usize(rank_idx + file).unwrap());
+                    write!(f, "| {c} ")?;
+                }
+                writeln!(f, "|")?;
+            }
             write!(f, "   ")?;
             for _ in 0..8 {
                 write!(f, "+---")?;
             }
             writeln!(f)?;
-            write!(f, " {rank} ")?;
-            for file in 0..8 {
-                let c = self.get_square_char(Square::from_usize(rank_idx + file).unwrap());
-                write!(f, "| {c} ")?;
+            writeln!(f, "     a   b   c   d   e   f   g   h")?;
+            writeln!(f)
+        } else {
+            writeln!(f)?;
+            let mut rank_idx = 0;
+            for rank in 1..9 {
+                // rank_idx -= 8;
+                write!(f, "   ")?;
+                for _ in 0..8 {
+                    write!(f, "+---")?;
+                }
+                writeln!(f)?;
+                write!(f, " {rank} ")?;
+                for file in (0..8).rev() {
+                    let c = self.get_square_char(Square::from_usize(rank_idx + file).unwrap());
+                    write!(f, "| {c} ")?;
+                }
+                writeln!(f, "|")?;
+                rank_idx += 8;
             }
-            writeln!(f, "|")?;
+            write!(f, "   ")?;
+            for _ in 0..8 {
+                write!(f, "+---")?;
+            }
+            writeln!(f)?;
+            writeln!(f, "     h   g   f   e   d   c   b   a")?;
+            writeln!(f)
         }
-        write!(f, "   ")?;
-        for _ in 0..8 {
-            write!(f, "+---")?;
-        }
-        writeln!(f)?;
-        writeln!(f, "     a   b   c   d   e   f   g   h")?;
-        writeln!(f)
     }
+}
+
+fn get_square_mask(square: Square) -> u64 {
+    1u64 << (square as u32)
 }
 
 impl From<usize> for Piece {
@@ -257,7 +282,7 @@ impl TryFrom<char> for PieceColour {
 
 impl fmt::Debug for BitBoard {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "{self}")
+        self.print(f, Colour::White)
     }
 }
 

@@ -83,6 +83,8 @@ fn play_game(engine: &mut Engine, quiet: bool) -> bool {
             return true;
         } else if input == "undo" {
             engine.undo_move();
+        } else if input == "flip" {
+            engine.flip_board();
         } else if input.starts_with("search") {
             let parts: Vec<&str> = input.split_whitespace().collect();
             assert!(parts.len() == 3);

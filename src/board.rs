@@ -364,6 +364,11 @@ impl Board {
         self.bitboard.remove_piece(colour, piece, source_sq);
         self.bitboard.place_piece(colour, piece, dest_sq);
     }
+
+    pub fn print(&self, f: &mut fmt::Formatter, from_perspective: Colour) -> fmt::Result {
+        self.bitboard.print(f, from_perspective)?;
+        writeln!(f, "{:?} to play", self.turn_colour)
+    }
 }
 
 pub enum CastlingSide {
@@ -474,13 +479,6 @@ impl Square {
                 _ => Err("Error: invalid en_passant square"),
             }
         }
-    }
-}
-
-impl fmt::Display for Board {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "{}", self.bitboard)?;
-        writeln!(f, "{:?} to play", self.turn_colour)
     }
 }
 

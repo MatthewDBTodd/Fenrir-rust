@@ -110,6 +110,20 @@ fn negamax(
         NODES_VISITED += 1;
     }
 
+    // can check for threefold before checking for checkmate as you can't repeat
+    // a checkmate position
+    if board.is_threefold_repetition() {
+        return Some(DRAW);
+    }
+    
+    // might have to move this after checking for checkmate/stalemate just
+    // incase the 50th move is decisive?
+    // we check for the fifty move rule after checking for checkmate/stalemate just incase
+    // the fiftieth move is a checkmate
+    if board.half_move_num >= 50 {
+        return Some(DRAW);
+    }
+
     let alpha_orig = alpha;
     {
         let (entry, found) = tt.get(board.board_hash);
@@ -135,11 +149,6 @@ fn negamax(
         }
     }
 
-    // can check for threefold before checking for checkmate as you can't repeat
-    // a checkmate position
-    if board.is_threefold_repetition() {
-        return Some(DRAW);
-    }
     if depth == 0 {
         // return Some(eval_position(board, attack_table));
         return quiescence(board, attack_table, alpha, beta, tt, stop_flag);
@@ -150,11 +159,6 @@ fn negamax(
     // game is over, either checkmate or stalemate
     if num_moves == 0 {
         return Some(get_end_condition(board, attack_table));
-    }
-    // we check for the fifty move rule after checking for checkmate/stalemate just incase
-    // the fiftieth move is a checkmate
-    if board.half_move_num >= 50 {
-        return Some(DRAW);
     }
 
     let mut value = i32::MIN + 1;
@@ -218,6 +222,17 @@ fn quiescence(
     stop_flag: &AtomicBool
 ) -> Option<i32>
 {
+
+    // can check for threefold before checking for checkmate as you can't repeat
+    // a checkmate position
+    if board.is_threefold_repetition() {
+        return Some(DRAW);
+    }
+
+    if board.half_move_num >= 50 {
+        return Some(DRAW);
+    }
+
     let standing_pat = eval_position(&board, attack_table);
     if standing_pat >= beta {
         return Some(beta);
@@ -225,8 +240,14 @@ fn quiescence(
         alpha = standing_pat;
     }
 
+
     let mut move_list = [Move::default(); 256];
     let num_moves = attack_table.generate_legal_moves(board, board.turn_colour, &mut move_list);
+
+    // game is over, either checkmate or stalemate
+    if num_moves == 0 {
+        return Some(get_end_condition(board, attack_table));
+    }
 
     let ignored_move_types = [
         MoveType::Quiet,
