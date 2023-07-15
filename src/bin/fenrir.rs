@@ -6,7 +6,7 @@ use clap::{Command, Arg, ArgAction};
 use fenrir::engine::{Engine, SearchMethod, GameState};
 use fenrir::shared_perft::*;
 
-const VERSION: &str = "Fenrir-quiescence";
+const VERSION: &str = "Fenrir-0.0003";
 
 fn get_user_input(quiet: bool) -> String {
     let mut input = String::new();
