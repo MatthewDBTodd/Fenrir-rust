@@ -1,7 +1,7 @@
 use crate::Square;
 use crate::chess_move::{Move, MoveType};
 use crate::Piece;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering, AtomicUsize};
 use std::convert::From;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
@@ -197,7 +197,7 @@ pub struct EncodedSearchResultPair {
 
 pub struct TranspositionTable {
     entries: Vec<EncodedSearchResultPair>,
-    capacity: usize,
+    capacity: AtomicUsize,
 }
 
 impl TranspositionTable {
@@ -206,12 +206,12 @@ impl TranspositionTable {
         let v = (0..capacity).map(|_| EncodedSearchResultPair::default()).collect();
         Self {
             entries: v,
-            capacity,
+            capacity: AtomicUsize::new(capacity),
         }
     }
 
     pub fn get(&self, hash: u64) -> Option<CachedSearchResult> {
-        let idx = hash as usize % self.capacity;
+        let idx = hash as usize % self.capacity.load(Ordering::Relaxed);
         let pair = &self.entries[idx];
 
         let entry_hash = pair.depth_preferred.hash.load(Ordering::Relaxed);
@@ -243,11 +243,11 @@ impl TranspositionTable {
         // (rv, match_type)
     }
 
-    pub fn insert(&mut self, hash: u64, search_result: CachedSearchResult) {
+    pub fn insert(&self, hash: u64, search_result: CachedSearchResult) {
 
-        let idx = hash as usize % self.capacity;
+        let idx = hash as usize % self.capacity.load(Ordering::Relaxed);
 
-        let entry = &mut self.entries[idx].depth_preferred;
+        let entry = &self.entries[idx].depth_preferred;
         let entry_data = entry.data.load(Ordering::Relaxed);
         let depth = (entry_data & 0x3F) as u8;
         
@@ -259,7 +259,7 @@ impl TranspositionTable {
         } else {
             let new_data: u64 = search_result.into();
             let new_hash = hash ^ new_data;
-            let entry = &mut self.entries[idx].always_replace;
+            let entry = &self.entries[idx].always_replace;
             entry.hash.store(new_hash, Ordering::Relaxed);
             entry.data.store(new_data, Ordering::Relaxed);
         }

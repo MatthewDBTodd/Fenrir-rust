@@ -17,7 +17,7 @@ pub fn search_position(
     mut board: Board, 
     attack_table: Arc<AttackTable>, 
     max_depth: u32,
-    tt: Arc<Mutex<TranspositionTable>>,
+    tt: Arc<TranspositionTable>,
     cv: Arc<(Mutex<()>, Condvar)>,
     quiet: bool,
 ) -> (Option<Move>, i32, u32) /* (move, eval, depth-reached) */ {
@@ -46,14 +46,14 @@ pub fn search_position(
                 break 'outer;
             }
             board.make_move(legal_moves.move_list[i]);
-            let mut tt = tt.lock().unwrap();
+            // let mut tt = tt.lock().unwrap();
             let e = negamax(
                 &mut board, 
                 &attack_table, 
                 current_depth-1, 
                 i32::MIN + 1, 
                 -current_best_eval, 
-                &mut tt,
+                &tt,
                 &stop_flag,
             );
             board.undo_move();
@@ -102,7 +102,7 @@ fn negamax(
     depth: u32, 
     mut alpha: i32,
     mut beta: i32, 
-    tt: &mut TranspositionTable, 
+    tt: &Arc<TranspositionTable>,
     stop_flag: &AtomicBool
 ) -> Option<i32> 
 {
@@ -230,7 +230,7 @@ fn quiescence(
     // depth: u32, 
     mut alpha: i32,
     beta: i32, 
-    tt: &mut TranspositionTable, 
+    tt: &Arc<TranspositionTable>,
     stop_flag: &AtomicBool
 ) -> Option<i32>
 {

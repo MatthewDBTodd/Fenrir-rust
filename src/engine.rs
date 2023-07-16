@@ -17,7 +17,7 @@ pub struct Engine {
     board: Board,
     attack_table: Arc<AttackTable>,
     hasher: Arc<ZobristHasher>,
-    transposition_table: Arc<Mutex<TranspositionTable>>,
+    transposition_table: Arc<TranspositionTable>,
     legal_moves: LegalMoves,
     pgn_move_history: Vec<String>,
     from_perspective: Colour,
@@ -59,7 +59,7 @@ impl Engine {
         // println!("done");
         let board = Board::new(fen, hasher.clone()).unwrap();
 
-        let transposition_table = Arc::new(Mutex::new(TranspositionTable::new(1 << 20)));
+        let transposition_table = Arc::new(TranspositionTable::new(1 << 20));
 
         let mut move_list = [Move::default(); 256];
         let num = attack_table.generate_legal_moves(&board, board.turn_colour, &mut move_list);
@@ -87,7 +87,7 @@ impl Engine {
             &board, board.turn_colour, &mut self.legal_moves.move_list
         );
         self.legal_moves.num = num;
-        let transposition_table = Arc::new(Mutex::new(TranspositionTable::new(1 << 20)));
+        let transposition_table = Arc::new(TranspositionTable::new(1 << 20));
         self.transposition_table = transposition_table;
         self.board = board;
         self.pgn_move_history.clear();
