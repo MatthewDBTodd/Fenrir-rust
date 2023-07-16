@@ -1,4 +1,4 @@
-use crate::transposition_table::{TranspositionTable, EntryMatch, ResultFlag};
+use crate::transposition_table::{TranspositionTable, ResultFlag, CachedSearchResult};
 use crate::{board::Board, attack_table::AttackTable, chess_move::Move,};
 use crate::shared_perft::*;
 use crate::eval::{eval_position, DRAW, CHECKMATE};
@@ -126,24 +126,17 @@ fn negamax(
 
     let alpha_orig = alpha;
     {
-        let (entry, found) = tt.get(board.board_hash);
-        if found != EntryMatch::NoMatch {
-            let entry = match found {
-                EntryMatch::DepthPreferredMatch => &mut entry.depth_preferred,
-                EntryMatch::AlwaysReplaceMatch => &mut entry.always_replace,
-                _ => panic!("This should not happen"),
-            };
-            if entry.depth_searched as u32 >= depth {
-                if entry.flag == ResultFlag::Exact {
-                    return Some(entry.eval);
-                } else if entry.flag == ResultFlag::LowerBound {
-                    alpha = cmp::max(alpha, entry.eval);
-                } else if entry.flag == ResultFlag::UpperBound {
-                    beta = cmp::min(beta, entry.eval);
+        if let Some(search_result) = tt.get(board.board_hash) {
+            if search_result.depth_searched as u32 >= depth {
+                if search_result.flag == ResultFlag::Exact {
+                    return Some(search_result.eval);
+                } else if search_result.flag == ResultFlag::LowerBound {
+                    alpha = cmp::max(alpha, search_result.eval);
+                } else if search_result.flag == ResultFlag::UpperBound {
+                    beta = cmp::min(beta, search_result.eval);
                 }
-
                 if alpha >= beta {
-                    return Some(entry.eval);
+                    return Some(search_result.eval);
                 }
             }
         }
@@ -187,27 +180,46 @@ fn negamax(
         }
     }
 
-    let (entry, _) = tt.get(board.board_hash);
-    let node2replace = if depth > entry.depth_preferred.depth_searched as u32 {
-        &mut entry.depth_preferred
-    } else {
-        &mut entry.always_replace
+    let new_entry = CachedSearchResult {
+        depth_searched: depth as u8,
+        eval: value,
+        best_move: if best_idx.is_some() {
+            Some(move_list[best_idx.unwrap()])
+        } else {
+            None
+        },
+        flag: if value <= alpha_orig {
+            ResultFlag::UpperBound
+        } else if value >= beta {
+            ResultFlag::LowerBound
+        } else {
+            ResultFlag::Exact
+        },
     };
-    node2replace.hash = board.board_hash;
-    node2replace.depth_searched = depth as u8;
-    node2replace.eval = value;
-    node2replace.flag = if value <= alpha_orig {
-        ResultFlag::UpperBound
-    } else if value >= beta {
-        ResultFlag::LowerBound
-    } else {
-        ResultFlag::Exact
-    };
-    node2replace.best_move = if best_idx.is_some() {
-        Some(move_list[best_idx.unwrap()])
-    } else {
-        None
-    };
+
+    tt.insert(board.board_hash, new_entry);
+
+    // let (entry, _) = tt.get(board.board_hash);
+    // let node2replace = if depth > entry.depth_preferred.depth_searched as u32 {
+    //     &mut entry.depth_preferred
+    // } else {
+    //     &mut entry.always_replace
+    // };
+    // node2replace.hash = board.board_hash;
+    // node2replace.depth_searched = depth as u8;
+    // node2replace.eval = value;
+    // node2replace.flag = if value <= alpha_orig {
+    //     ResultFlag::UpperBound
+    // } else if value >= beta {
+    //     ResultFlag::LowerBound
+    // } else {
+    //     ResultFlag::Exact
+    // };
+    // node2replace.best_move = if best_idx.is_some() {
+    //     Some(move_list[best_idx.unwrap()])
+    // } else {
+    //     None
+    // };
 
     Some(value)
 }

@@ -4,10 +4,15 @@ use crate::board::CastlingRights;
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[allow(dead_code)]
 pub struct Move {
-    pub source_sq: Square,
-    pub dest_sq: Square,
-    pub piece: Piece,
-    pub move_type: MoveType,
+    pub source_sq: Square, // 6 bits
+    pub dest_sq: Square, // 6 bits
+    pub piece: Piece, // 3 bits
+    pub move_type: MoveType, // 3 bits
+    // 6 bits for move_type flags
+    // 2 bits for ResultFlag
+    // 32 bits for eval
+    // 6 bits for depth-searched
+
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
