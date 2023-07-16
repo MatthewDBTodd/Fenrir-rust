@@ -136,37 +136,60 @@ impl Engine {
     }
 
     pub fn search_position(
-        &mut self, search_method: SearchMethod, quiet: bool
+        &mut self, search_method: SearchMethod, quiet: bool, num_threads: i32,
     ) -> (Option<Move>, i32, u32) 
     {
-        let legal_moves = self.legal_moves.clone();
         let stop_searching = Arc::new(AtomicBool::new(false));
-        let stop_flag = stop_searching.clone();
         let pair = Arc::new((Mutex::new(()), Condvar::new()));
-        let pair2 = pair.clone();
-        let b = self.board.clone();
-        let at = self.attack_table.clone();
-        let tt = self.transposition_table.clone();
-        let depth = match search_method {
-            SearchMethod::ToDepth(n) => n,
-            SearchMethod::ToTime(_) => 1000000000,
-        };
-        let search_thread = std::thread::spawn(move || search_position(
-            legal_moves,
-            stop_flag, 
-            b,
-            at,
-            depth, 
-            tt,
-            pair2,
-            quiet,
-        ));
+        let mut threads = Vec::new();
+        for i in 0..num_threads {
+            let legal_moves = self.legal_moves.clone();
+            let stop_flag = stop_searching.clone();
+            let pair2 = pair.clone();
+            let b = self.board.clone();
+            let at = self.attack_table.clone();
+            let tt = self.transposition_table.clone();
+            let starting_depth: u32 = ((i % 4) + 1) as u32;
+            let depth = match search_method {
+                SearchMethod::ToDepth(n) => n,
+                SearchMethod::ToTime(_) => 1000000000,
+            };
+            threads.push(
+                std::thread::spawn(move || search_position(
+                    legal_moves,
+                    stop_flag, 
+                    b,
+                    at,
+                    starting_depth,
+                    depth, 
+                    tt,
+                    pair2,
+                    quiet,
+                )
+            ));
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+
         if let SearchMethod::ToTime(time) = search_method {
             let guard = pair.0.lock().unwrap();
             let _rv = pair.1.wait_timeout(guard, time).unwrap();
             stop_searching.store(true, Ordering::Relaxed);
         }
-        search_thread.join().unwrap()
+        let mut best_move: Option<Move> = None;
+        let mut best_eval: i32 = 0;
+        let mut best_depth: u32 = 0;
+        let mut thread_num = 1;
+        for handle in threads {
+            let (m, eval, depth) = handle.join().unwrap();
+            println!("Thread {} exited with result: best-move = {:?}, eval = {}, depth = {}", thread_num, m, eval, depth);
+            if depth > best_depth {
+                best_depth = depth;
+                best_eval = eval;
+                best_move = m;
+            }
+            thread_num += 1;
+        }
+        (best_move, best_eval, best_depth)
         // search_position(stop_flag, &mut self.board, &self.attack_table, depth, &mut self.transposition_table)
     }
 

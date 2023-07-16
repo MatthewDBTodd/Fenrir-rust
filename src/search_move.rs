@@ -6,9 +6,13 @@ use crate::engine::LegalMoves;
 use crate::chess_move::MoveType;
 use std::cmp;
 use std::sync::Condvar;
-use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}};
+use std::sync::{Arc, Mutex, atomic::{AtomicBool, AtomicU64, Ordering}};
 
-static mut NODES_VISITED: u64 = 0;
+static NEGAMAX_NODES: AtomicU64 = AtomicU64::new(0);
+static QUIESCENCE_NODES: AtomicU64 = AtomicU64::new(0);
+static TT_TOTAL_HITS: AtomicU64 = AtomicU64::new(0);
+static TT_EXACT_HITS: AtomicU64 = AtomicU64::new(0);
+static TT_INSERTS: AtomicU64 = AtomicU64::new(0);
 
 // alpha-beta search. Returns best move with its eval
 pub fn search_position(
@@ -16,6 +20,7 @@ pub fn search_position(
     stop_flag: Arc<AtomicBool>, 
     mut board: Board, 
     attack_table: Arc<AttackTable>, 
+    starting_depth: u32,
     max_depth: u32,
     tt: Arc<TranspositionTable>,
     cv: Arc<(Mutex<()>, Condvar)>,
@@ -32,7 +37,7 @@ pub fn search_position(
         println!("checking {} moves...", legal_moves.num);
     }
 
-    let mut current_depth = 1;
+    let mut current_depth = starting_depth;
     'outer: while current_depth <= max_depth {
         if stop_flag.load(Ordering::Relaxed) {
             break;
@@ -61,9 +66,9 @@ pub fn search_position(
                 break 'outer;
             }
             let e = -e.unwrap();
-            if !quiet {
-                println!("{:?} -> {e}", legal_moves.move_list[i]);
-            }
+            // if !quiet {
+            //     println!("{:?} -> {e}", legal_moves.move_list[i]);
+            // }
             if e > current_best_eval {
                 current_best_move = legal_moves.move_list[i];
                 current_best_eval = e;
@@ -84,14 +89,14 @@ pub fn search_position(
             legal_moves.move_list.swap(i-1, i);
         }
 
-        if !quiet {
-            unsafe {
-                let bf = branching_factor(NODES_VISITED, current_depth);
-                println!("branching factor = {}", bf);
-                NODES_VISITED = 0;
-            }
-        }
         current_depth += 1;
+    }
+    if !quiet {
+        println!("{} Negamax nodes, {} quiescence nodes, {} TT total hits, {} TT exact hits
+        , {} TT insertions",
+        NEGAMAX_NODES.load(Ordering::Relaxed), QUIESCENCE_NODES.load(Ordering::Relaxed),
+        TT_TOTAL_HITS.load(Ordering::Relaxed), TT_EXACT_HITS.load(Ordering::Relaxed),
+        TT_INSERTS.load(Ordering::Relaxed));
     }
     (Some(best_move), best_eval, current_depth-1)
 }
@@ -106,10 +111,7 @@ fn negamax(
     stop_flag: &AtomicBool
 ) -> Option<i32> 
 {
-    unsafe {
-        NODES_VISITED += 1;
-    }
-
+    NEGAMAX_NODES.fetch_add(1u64, Ordering::Relaxed);
     // can check for threefold before checking for checkmate as you can't repeat
     // a checkmate position
     if board.is_threefold_repetition() {
@@ -127,8 +129,10 @@ fn negamax(
     let alpha_orig = alpha;
     {
         if let Some(search_result) = tt.get(board.board_hash) {
+            TT_TOTAL_HITS.fetch_add(1u64, Ordering::Relaxed);
             if search_result.depth_searched as u32 >= depth {
                 if search_result.flag == ResultFlag::Exact {
+                    TT_EXACT_HITS.fetch_add(1u64, Ordering::Relaxed);
                     return Some(search_result.eval);
                 } else if search_result.flag == ResultFlag::LowerBound {
                     alpha = cmp::max(alpha, search_result.eval);
@@ -198,6 +202,7 @@ fn negamax(
     };
 
     tt.insert(board.board_hash, new_entry);
+    TT_INSERTS.fetch_add(1u64, Ordering::Relaxed);
 
     // let (entry, _) = tt.get(board.board_hash);
     // let node2replace = if depth > entry.depth_preferred.depth_searched as u32 {
@@ -227,7 +232,7 @@ fn negamax(
 fn quiescence(
     board: &mut Board, 
     attack_table: &AttackTable, 
-    // depth: u32, 
+    // current_depth: u32, 
     mut alpha: i32,
     beta: i32, 
     tt: &Arc<TranspositionTable>,
@@ -235,6 +240,7 @@ fn quiescence(
 ) -> Option<i32>
 {
 
+    QUIESCENCE_NODES.fetch_add(1u64, Ordering::Relaxed);
     // can check for threefold before checking for checkmate as you can't repeat
     // a checkmate position
     if board.is_threefold_repetition() {
@@ -244,6 +250,25 @@ fn quiescence(
     if board.half_move_num >= 50 {
         return Some(DRAW);
     }
+
+        /* 
+    {
+        if let Some(search_result) = tt.get(board.board_hash) {
+            if search_result.depth_searched as u32 >= depth {
+                if search_result.flag == ResultFlag::Exact {
+                    return Some(search_result.eval);
+                } else if search_result.flag == ResultFlag::LowerBound {
+                    alpha = cmp::max(alpha, search_result.eval);
+                } else if search_result.flag == ResultFlag::UpperBound {
+                    beta = cmp::min(beta, search_result.eval);
+                }
+                if alpha >= beta {
+                    return Some(search_result.eval);
+                }
+            }
+        }
+    }
+    */
 
     let standing_pat = eval_position(&board, attack_table);
     if standing_pat >= beta {

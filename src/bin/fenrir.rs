@@ -8,6 +8,8 @@ use fenrir::shared_perft::*;
 
 const VERSION: &str = "Fenrir-0.0003";
 
+const NUM_THREADS: i32 = 4;
+
 fn get_user_input(quiet: bool) -> String {
     let mut input = String::new();
     if !quiet {
@@ -112,7 +114,7 @@ fn play_game(engine: &mut Engine, quiet: bool) -> bool {
 
             let start = Instant::now();
 
-            let (best_move, eval, depth_searched) = engine.search_position(method, quiet);
+            let (best_move, eval, depth_searched) = engine.search_position(method, quiet, NUM_THREADS);
             let duration = start.elapsed().as_secs_f64();
             let best_move = best_move.unwrap();
             if quiet {
