@@ -8,7 +8,7 @@ use fenrir::shared_perft::*;
 
 const VERSION: &str = "Fenrir-0.0003";
 
-const NUM_THREADS: i32 = 4;
+const NUM_THREADS: i32 = 8;
 
 fn get_user_input(quiet: bool) -> String {
     let mut input = String::new();

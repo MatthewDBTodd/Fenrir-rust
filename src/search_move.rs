@@ -8,11 +8,53 @@ use std::cmp;
 use std::sync::Condvar;
 use std::sync::{Arc, Mutex, atomic::{AtomicBool, AtomicU64, Ordering}};
 
-static NEGAMAX_NODES: AtomicU64 = AtomicU64::new(0);
-static QUIESCENCE_NODES: AtomicU64 = AtomicU64::new(0);
-static TT_TOTAL_HITS: AtomicU64 = AtomicU64::new(0);
-static TT_EXACT_HITS: AtomicU64 = AtomicU64::new(0);
-static TT_INSERTS: AtomicU64 = AtomicU64::new(0);
+pub struct SearchStats {
+    pub negamax_nodes: AtomicU64,
+    pub quiescence_nodes: AtomicU64,
+    pub tt_total_hits: AtomicU64,
+    pub tt_exact_hits: AtomicU64,
+    pub tt_inserts: AtomicU64,
+}
+
+pub enum Counter {
+    NegamaxNodes,
+    QuiescenceNodes,
+    TTTotalHits,
+    TTExactHits,
+    TTInserts,
+}
+
+impl SearchStats {
+    pub fn new() -> Self {
+        Self {
+            negamax_nodes: AtomicU64::new(0),
+            quiescence_nodes: AtomicU64::new(0),
+            tt_total_hits: AtomicU64::new(0),
+            tt_exact_hits: AtomicU64::new(0),
+            tt_inserts: AtomicU64::new(0),
+        }
+    }
+
+    pub fn inc(&self, counter: Counter) {
+        match counter {
+            Counter::NegamaxNodes => { 
+                self.negamax_nodes.fetch_add(1, Ordering::Relaxed); 
+            },
+            Counter::QuiescenceNodes => { 
+                self.quiescence_nodes.fetch_add(1, Ordering::Relaxed); 
+            },
+            Counter::TTTotalHits => {
+                self.tt_total_hits.fetch_add(1, Ordering::Relaxed);
+            },
+            Counter::TTExactHits => {
+                self.tt_exact_hits.fetch_add(1, Ordering::Relaxed);
+            },
+            Counter::TTInserts => {
+                self.tt_inserts.fetch_add(1, Ordering::Relaxed);
+            },
+        }
+    }
+}
 
 // alpha-beta search. Returns best move with its eval
 pub fn search_position(
@@ -25,6 +67,7 @@ pub fn search_position(
     tt: Arc<TranspositionTable>,
     cv: Arc<(Mutex<()>, Condvar)>,
     quiet: bool,
+    stats: Arc<SearchStats>,
 ) -> (Option<Move>, i32, u32) /* (move, eval, depth-reached) */ {
 
     let mut best_move: Move = Move::default();
@@ -60,6 +103,7 @@ pub fn search_position(
                 -current_best_eval, 
                 &tt,
                 &stop_flag,
+                &stats,
             );
             board.undo_move();
             if e.is_none() {
@@ -91,13 +135,6 @@ pub fn search_position(
 
         current_depth += 1;
     }
-    if !quiet {
-        println!("{} Negamax nodes, {} quiescence nodes, {} TT total hits, {} TT exact hits
-        , {} TT insertions",
-        NEGAMAX_NODES.load(Ordering::Relaxed), QUIESCENCE_NODES.load(Ordering::Relaxed),
-        TT_TOTAL_HITS.load(Ordering::Relaxed), TT_EXACT_HITS.load(Ordering::Relaxed),
-        TT_INSERTS.load(Ordering::Relaxed));
-    }
     (Some(best_move), best_eval, current_depth-1)
 }
 
@@ -108,10 +145,11 @@ fn negamax(
     mut alpha: i32,
     mut beta: i32, 
     tt: &Arc<TranspositionTable>,
-    stop_flag: &AtomicBool
+    stop_flag: &AtomicBool,
+    stats: &Arc<SearchStats>,
 ) -> Option<i32> 
 {
-    NEGAMAX_NODES.fetch_add(1u64, Ordering::Relaxed);
+    stats.inc(Counter::NegamaxNodes);
     // can check for threefold before checking for checkmate as you can't repeat
     // a checkmate position
     if board.is_threefold_repetition() {
@@ -129,10 +167,10 @@ fn negamax(
     let alpha_orig = alpha;
     {
         if let Some(search_result) = tt.get(board.board_hash) {
-            TT_TOTAL_HITS.fetch_add(1u64, Ordering::Relaxed);
+            stats.inc(Counter::TTTotalHits);
             if search_result.depth_searched as u32 >= depth {
                 if search_result.flag == ResultFlag::Exact {
-                    TT_EXACT_HITS.fetch_add(1u64, Ordering::Relaxed);
+                    stats.inc(Counter::TTExactHits);
                     return Some(search_result.eval);
                 } else if search_result.flag == ResultFlag::LowerBound {
                     alpha = cmp::max(alpha, search_result.eval);
@@ -148,7 +186,7 @@ fn negamax(
 
     if depth == 0 {
         // return Some(eval_position(board, attack_table));
-        return quiescence(board, attack_table, alpha, beta, tt, stop_flag);
+        return quiescence(board, attack_table, alpha, beta, tt, stop_flag, stats);
     }
 
     let mut move_list = [Move::default(); 256];
@@ -165,7 +203,7 @@ fn negamax(
             return None;
         }
         board.make_move(move_list[i]);
-        let rv = negamax(board, attack_table, depth-1, -beta, -alpha, tt, stop_flag);
+        let rv = negamax(board, attack_table, depth-1, -beta, -alpha, tt, stop_flag, stats);
         board.undo_move();
         if rv.is_none() {
             return None;
@@ -202,7 +240,7 @@ fn negamax(
     };
 
     tt.insert(board.board_hash, new_entry);
-    TT_INSERTS.fetch_add(1u64, Ordering::Relaxed);
+    stats.inc(Counter::TTInserts);
 
     // let (entry, _) = tt.get(board.board_hash);
     // let node2replace = if depth > entry.depth_preferred.depth_searched as u32 {
@@ -236,11 +274,11 @@ fn quiescence(
     mut alpha: i32,
     beta: i32, 
     tt: &Arc<TranspositionTable>,
-    stop_flag: &AtomicBool
+    stop_flag: &AtomicBool,
+    stats: &Arc<SearchStats>,
 ) -> Option<i32>
 {
-
-    QUIESCENCE_NODES.fetch_add(1u64, Ordering::Relaxed);
+    stats.inc(Counter::QuiescenceNodes);
     // can check for threefold before checking for checkmate as you can't repeat
     // a checkmate position
     if board.is_threefold_repetition() {
@@ -300,7 +338,7 @@ fn quiescence(
             break;
         }
         board.make_move(move_list[i]);
-        let eval = quiescence(board, attack_table, -beta, -alpha, tt, stop_flag);
+        let eval = quiescence(board, attack_table, -beta, -alpha, tt, stop_flag, stats);
         if eval.is_none() {
             return None;
         }
@@ -326,6 +364,6 @@ fn get_end_condition(board: &Board, att_table: &AttackTable) -> i32 {
     }
 }
 
-fn branching_factor(nodes: u64, depth: u32) -> f64 {
-    (nodes as f64).powf(1.0 / depth as f64)
-}
+// fn branching_factor(nodes: u64, depth: u32) -> f64 {
+//     (nodes as f64).powf(1.0 / depth as f64)
+// }

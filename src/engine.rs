@@ -154,7 +154,9 @@ impl Engine {
                 SearchMethod::ToDepth(n) => n,
                 SearchMethod::ToTime(_) => 1000000000,
             };
-            threads.push(
+            let stats = Arc::new(SearchStats::new());
+            let stats2 = stats.clone();
+            threads.push((
                 std::thread::spawn(move || search_position(
                     legal_moves,
                     stop_flag, 
@@ -165,8 +167,9 @@ impl Engine {
                     tt,
                     pair2,
                     quiet,
+                    stats2,
                 )
-            ));
+            ), stats));
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
 
@@ -179,9 +182,13 @@ impl Engine {
         let mut best_eval: i32 = 0;
         let mut best_depth: u32 = 0;
         let mut thread_num = 1;
-        for handle in threads {
+        for (handle, stats) in threads {
             let (m, eval, depth) = handle.join().unwrap();
             println!("Thread {} exited with result: best-move = {:?}, eval = {}, depth = {}", thread_num, m, eval, depth);
+            println!("{} Negamax nodes, {} quiescence nodes, {} TT total hits, {} TT exact hits, {} TT insertions",
+            stats.negamax_nodes.load(Ordering::Relaxed), stats.quiescence_nodes.load(Ordering::Relaxed),
+            stats.tt_total_hits.load(Ordering::Relaxed), stats.tt_exact_hits.load(Ordering::Relaxed),
+            stats.tt_inserts.load(Ordering::Relaxed));
             if depth > best_depth {
                 best_depth = depth;
                 best_eval = eval;
