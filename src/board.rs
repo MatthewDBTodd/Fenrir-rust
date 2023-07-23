@@ -371,6 +371,13 @@ impl Board {
     }
 }
 
+impl fmt::Display for Board {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "{}", self.bitboard)?;
+        writeln!(f, "{:?} to play", self.turn_colour)
+    }
+}
+
 pub enum CastlingSide {
     WhiteKingside,
     WhiteQueenside,

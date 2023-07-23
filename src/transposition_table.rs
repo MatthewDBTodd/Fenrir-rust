@@ -244,6 +244,7 @@ impl TranspositionTable {
     }
 
     pub fn insert(&self, hash: u64, search_result: CachedSearchResult) {
+        // println!("inserting {:x} -> {:?}", hash, search_result);
 
         let idx = hash as usize % self.capacity.load(Ordering::Relaxed);
 

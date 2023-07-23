@@ -1,11 +1,11 @@
 use rand::Rng;
-use crate::{board::Board, chess_move::{MoveType, SavedMove}, Piece, Colour, Square};
+use crate::{board::Board, chess_move::{MoveType, SavedMove}, Piece, Colour, Square,};
 
 // Zobrist hashing
 #[derive(Debug)]
 pub struct ZobristHasher {
-    // indexed by [piece][square]
-    piece_square_rngs: Vec<Vec<u64>>,
+    // indexed by [piece][colour][square]
+    piece_square_rngs: Vec<Vec<Vec<u64>>>,
     // w_kingside, w_queenside, b_kingside, b_queenside
     castle_rngs: Vec<u64>,
     black_rng: u64,
@@ -16,13 +16,17 @@ pub struct ZobristHasher {
 impl ZobristHasher {
     pub fn new() -> Self {
         let mut rng = rand::thread_rng();
-        let mut piece_square_rngs: Vec<Vec<u64>> = Vec::with_capacity(6);
-        for _ in [Piece::Pawn, Piece::King, Piece::Queen, Piece::Bishop, Piece::Knight, Piece::Rook] {
-            let mut v: Vec<u64> = Vec::with_capacity(64);
-            for _ in 0..64 {
-                v.push(rng.gen::<u64>());
+        let mut piece_square_rngs: Vec<Vec<Vec<u64>>> = Vec::with_capacity(6);
+        for _ in 0..6 {
+            let mut by_colour: Vec<Vec<u64>> = Vec::with_capacity(2);
+            for _ in 0..2 {
+                let mut squares: Vec<u64> = Vec::with_capacity(64);
+                for _ in 0..64 {
+                    squares.push(rng.gen::<u64>());
+                }
+                by_colour.push(squares);
             }
-            piece_square_rngs.push(v);
+            piece_square_rngs.push(by_colour);
         }
         let mut castle_rngs: Vec<u64> = Vec::with_capacity(4);
         castle_rngs.push(rng.gen::<u64>());
@@ -51,13 +55,14 @@ impl ZobristHasher {
         for piece in [Piece::Pawn, Piece::King, Piece::Queen, Piece::Bishop, Piece::Knight, Piece::Rook] {
             let piece_idx: usize = piece as usize;
             for colour in [Colour::White, Colour::Black] {
+                let colour_idx = colour as usize;
                 let mut all_pieces = board.bitboard.get_colour_piece_mask(piece, colour);
                 while all_pieces != 0 {
                     let one_piece = all_pieces & all_pieces.wrapping_neg();
                     all_pieces ^= one_piece;
                     let square_idx: usize = one_piece.trailing_zeros() as usize;
 
-                    hash ^= self.piece_square_rngs[piece_idx][square_idx];
+                    hash ^= self.piece_square_rngs[piece_idx][colour_idx][square_idx];
                 }
             }
         }
@@ -97,17 +102,22 @@ impl ZobristHasher {
         let source_sq_idx = saved_move.move_.source_sq as usize;
         let dest_sq_idx = saved_move.move_.dest_sq as usize;
 
-        hash ^= self.piece_square_rngs[piece_idx][source_sq_idx];
-        hash ^= self.piece_square_rngs[piece_idx][dest_sq_idx];
+        let move_colour = board.bitboard.get_colour_for_square(saved_move.move_.dest_sq).unwrap();
+        let opposite_colour = !&move_colour;
+        let move_colour_idx = move_colour as usize;
+        let opposite_colour_idx = opposite_colour as usize;
+
+        hash ^= self.piece_square_rngs[piece_idx][move_colour_idx][source_sq_idx];
+        hash ^= self.piece_square_rngs[piece_idx][move_colour_idx][dest_sq_idx];
 
         match saved_move.move_.move_type {
             MoveType::Capture(p) => {
                 let captured_piece_idx = p as usize;
-                hash ^= self.piece_square_rngs[captured_piece_idx][dest_sq_idx];
+                hash ^= self.piece_square_rngs[captured_piece_idx][opposite_colour_idx][dest_sq_idx];
             },
             MoveType::EnPassant(captured_pawn_square) => {
                 let captured_piece_idx = captured_pawn_square as usize;
-                hash ^= self.piece_square_rngs[Piece::Pawn as usize][captured_piece_idx];
+                hash ^= self.piece_square_rngs[Piece::Pawn as usize][opposite_colour_idx][captured_piece_idx];
             },
             MoveType::CastleKingSide => {
                 let (rook_source_sq, rook_dest_sq) = match saved_move.move_.source_sq {
@@ -118,8 +128,8 @@ impl ZobristHasher {
 
                 let source_sq_idx = rook_source_sq as usize;
                 let dest_sq_idx = rook_dest_sq as usize;
-                hash ^= self.piece_square_rngs[Piece::Rook as usize][source_sq_idx];
-                hash ^= self.piece_square_rngs[Piece::Rook as usize][dest_sq_idx];
+                hash ^= self.piece_square_rngs[Piece::Rook as usize][move_colour_idx][source_sq_idx];
+                hash ^= self.piece_square_rngs[Piece::Rook as usize][move_colour_idx][dest_sq_idx];
             },
             MoveType::CastleQueenSide => {
                 let (rook_source_sq, rook_dest_sq) = match saved_move.move_.source_sq {
@@ -130,22 +140,22 @@ impl ZobristHasher {
 
                 let source_sq_idx = rook_source_sq as usize;
                 let dest_sq_idx = rook_dest_sq as usize;
-                hash ^= self.piece_square_rngs[Piece::Rook as usize][source_sq_idx];
-                hash ^= self.piece_square_rngs[Piece::Rook as usize][dest_sq_idx];
+                hash ^= self.piece_square_rngs[Piece::Rook as usize][move_colour_idx][source_sq_idx];
+                hash ^= self.piece_square_rngs[Piece::Rook as usize][move_colour_idx][dest_sq_idx];
             },
             MoveType::MovePromotion(p) => {
                 let promotion_piece_idx = p as usize;
-                hash ^= self.piece_square_rngs[promotion_piece_idx][dest_sq_idx];
+                hash ^= self.piece_square_rngs[promotion_piece_idx][move_colour_idx][dest_sq_idx];
                 // TODO: This is inefficient simply removing the xor we just did above
-                hash ^= self.piece_square_rngs[piece_idx][dest_sq_idx];
+                hash ^= self.piece_square_rngs[piece_idx][move_colour_idx][dest_sq_idx];
             },
             MoveType::CapturePromotion(captured_p, promotion_p) => {
                 let captured_piece_idx = captured_p as usize;
-                hash ^= self.piece_square_rngs[captured_piece_idx][dest_sq_idx];
+                hash ^= self.piece_square_rngs[captured_piece_idx][opposite_colour_idx][dest_sq_idx];
                 let promotion_piece_idx = promotion_p as usize;
-                hash ^= self.piece_square_rngs[promotion_piece_idx][dest_sq_idx];
+                hash ^= self.piece_square_rngs[promotion_piece_idx][move_colour_idx][dest_sq_idx];
                 // TODO: This is inefficient simply removing the xor we just did above
-                hash ^= self.piece_square_rngs[piece_idx][dest_sq_idx];
+                hash ^= self.piece_square_rngs[piece_idx][move_colour_idx][dest_sq_idx];
             },
             MoveType::ErrorMove => panic!("ErrorMove type in update_hash"),
             _ => (),
@@ -340,5 +350,21 @@ mod tests {
         );
         board.undo_move();
         assert_eq!(old_hash, board.board_hash);
+    }
+
+    #[test]
+    fn test_bug() {
+        let hasher = Arc::new(ZobristHasher::new());
+        let board = Board::new(
+            Some("r1bqkbnr/1ppp1ppp/8/nP2p3/4P3/5N2/1PPP1PPP/RNBQ1RK1 b kq - 0 6"),
+            hasher.clone(),
+        ).unwrap();
+        println!("----------------------");
+        let board2 = Board::new(
+            Some("r1bqkbnr/1ppp1ppp/8/np2p3/4P3/5N2/1PPP1PPP/RNBQ1RK1 b kq - 0 6"),
+            hasher.clone(),
+        ).unwrap();
+
+        assert_ne!(board.board_hash, board2.board_hash);
     }
 }

@@ -133,6 +133,16 @@ impl BitBoard {
         self.get_piece_type_from_mask(mask)
     }
 
+    pub fn get_colour_for_square(&self, square: Square) -> Option<Colour> {
+        let mask = 1 << square as u32;
+        if mask & self.get_colour_mask(Colour::White) != 0 {
+            return Some(Colour::White);
+        } else if mask & self.get_colour_mask(Colour::Black) != 0 {
+            return Some(Colour::Black);
+        }
+        None
+    }
+
     // returns number of the given piece type for (white, black)
     // used for board evaluation
     pub fn num_pieces(&self, piece_type: Piece) -> (u32, u32) {
@@ -220,6 +230,35 @@ impl BitBoard {
         }
     }
 }
+
+impl fmt::Display for BitBoard {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f)?;
+        let mut rank_idx = 64;
+        for rank in (1..9).rev() {
+            rank_idx -= 8;
+            write!(f, "   ")?;
+            for _ in 0..8 {
+                write!(f, "+---")?;
+            }
+            writeln!(f)?;
+            write!(f, " {rank} ")?;
+            for file in 0..8 {
+                let c = self.get_square_char(Square::from_usize(rank_idx + file).unwrap());
+                write!(f, "| {c} ")?;
+            }
+            writeln!(f, "|")?;
+        }
+        write!(f, "   ")?;
+        for _ in 0..8 {
+            write!(f, "+---")?;
+        }
+        writeln!(f)?;
+        writeln!(f, "     a   b   c   d   e   f   g   h")?;
+        writeln!(f)
+    }
+}
+
 
 fn get_square_mask(square: Square) -> u64 {
     1u64 << (square as u32)

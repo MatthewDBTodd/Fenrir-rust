@@ -56,6 +56,16 @@ impl SearchStats {
     }
 }
 
+pub fn stable_shift_left(move_list: &mut [Move; 256], pv_move: &Move) {
+    let idx = move_list.iter().position(|m| m == pv_move).unwrap();
+    let temp = move_list[idx];
+    for i in (1..=idx).rev() {
+        move_list[i] = move_list[i-1];
+    }
+    move_list[0] = temp;
+}
+
+
 // alpha-beta search. Returns best move with its eval
 pub fn search_position(
     mut legal_moves: LegalMoves,
@@ -165,21 +175,20 @@ fn negamax(
     }
 
     let alpha_orig = alpha;
-    {
-        if let Some(search_result) = tt.get(board.board_hash) {
-            stats.inc(Counter::TTTotalHits);
-            if search_result.depth_searched as u32 >= depth {
-                if search_result.flag == ResultFlag::Exact {
-                    stats.inc(Counter::TTExactHits);
-                    return Some(search_result.eval);
-                } else if search_result.flag == ResultFlag::LowerBound {
-                    alpha = cmp::max(alpha, search_result.eval);
-                } else if search_result.flag == ResultFlag::UpperBound {
-                    beta = cmp::min(beta, search_result.eval);
-                }
-                if alpha >= beta {
-                    return Some(search_result.eval);
-                }
+    let search_result = tt.get(board.board_hash);
+    if let Some(search_result) = &search_result {
+        stats.inc(Counter::TTTotalHits);
+        if search_result.depth_searched as u32 >= depth {
+            if search_result.flag == ResultFlag::Exact {
+                stats.inc(Counter::TTExactHits);
+                return Some(search_result.eval);
+            } else if search_result.flag == ResultFlag::LowerBound {
+                alpha = cmp::max(alpha, search_result.eval);
+            } else if search_result.flag == ResultFlag::UpperBound {
+                beta = cmp::min(beta, search_result.eval);
+            }
+            if alpha >= beta {
+                return Some(search_result.eval);
             }
         }
     }
@@ -194,6 +203,13 @@ fn negamax(
     // game is over, either checkmate or stalemate
     if num_moves == 0 {
         return Some(get_end_condition(board, attack_table));
+    }
+
+    if let Some(search_result) = search_result {
+        let pv_move = search_result.best_move;
+        if pv_move.is_some() {
+            stable_shift_left(&mut move_list, &pv_move.unwrap());
+        }
     }
 
     let mut value = i32::MIN + 1;
@@ -238,31 +254,8 @@ fn negamax(
             ResultFlag::Exact
         },
     };
-
     tt.insert(board.board_hash, new_entry);
     stats.inc(Counter::TTInserts);
-
-    // let (entry, _) = tt.get(board.board_hash);
-    // let node2replace = if depth > entry.depth_preferred.depth_searched as u32 {
-    //     &mut entry.depth_preferred
-    // } else {
-    //     &mut entry.always_replace
-    // };
-    // node2replace.hash = board.board_hash;
-    // node2replace.depth_searched = depth as u8;
-    // node2replace.eval = value;
-    // node2replace.flag = if value <= alpha_orig {
-    //     ResultFlag::UpperBound
-    // } else if value >= beta {
-    //     ResultFlag::LowerBound
-    // } else {
-    //     ResultFlag::Exact
-    // };
-    // node2replace.best_move = if best_idx.is_some() {
-    //     Some(move_list[best_idx.unwrap()])
-    // } else {
-    //     None
-    // };
 
     Some(value)
 }
