@@ -99,6 +99,28 @@ pub fn search_position(
         let mut current_best_eval: i32 = i32::MIN + 1;
         let mut current_best_index = 0;
 
+        let mut alpha = i32::MIN + 1;
+        let mut beta = -current_best_eval;
+
+        if let Some(rv) = tt.get(board.board_hash) {
+            if rv.depth_searched as u32 >= current_depth {
+                if rv.flag == ResultFlag::Exact {
+                    // println!("found tt match");
+                    best_eval = rv.eval;
+                    best_move = rv.best_move.unwrap_or_default();
+                    current_depth += 1;
+                    continue;
+                } else if rv.flag == ResultFlag::LowerBound {
+                    alpha = cmp::max(alpha, rv.eval);
+                } else if rv.flag == ResultFlag::UpperBound {
+                    beta = cmp::min(beta, rv.eval);
+                }
+            }
+            if rv.best_move.is_some() {
+                stable_shift_left(&mut legal_moves.move_list, &rv.best_move.unwrap());
+            }
+        }
+
         for i in 0..legal_moves.num {
             if stop_flag.load(Ordering::Relaxed) {
                 break 'outer;
@@ -109,8 +131,10 @@ pub fn search_position(
                 &mut board, 
                 &attack_table, 
                 current_depth-1, 
-                i32::MIN + 1, 
-                -current_best_eval, 
+                alpha,
+                beta,
+                // i32::MIN + 1, 
+                // -current_best_eval, 
                 &tt,
                 &stop_flag,
                 &stats,

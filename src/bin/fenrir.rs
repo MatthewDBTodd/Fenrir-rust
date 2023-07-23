@@ -6,7 +6,7 @@ use clap::{Command, Arg, ArgAction};
 use fenrir::engine::{Engine, SearchMethod, GameState};
 use fenrir::shared_perft::*;
 
-const VERSION: &str = "Fenrir-0.0003";
+const VERSION: &str = "Fenrir-multithreaded";
 
 const NUM_THREADS: i32 = 8;
 

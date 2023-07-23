@@ -184,11 +184,13 @@ impl Engine {
         let mut thread_num = 1;
         for (handle, stats) in threads {
             let (m, eval, depth) = handle.join().unwrap();
-            println!("Thread {} exited with result: best-move = {:?}, eval = {}, depth = {}", thread_num, m, eval, depth);
-            println!("{} Negamax nodes, {} quiescence nodes, {} TT total hits, {} TT exact hits, {} TT insertions",
-            stats.negamax_nodes.load(Ordering::Relaxed), stats.quiescence_nodes.load(Ordering::Relaxed),
-            stats.tt_total_hits.load(Ordering::Relaxed), stats.tt_exact_hits.load(Ordering::Relaxed),
-            stats.tt_inserts.load(Ordering::Relaxed));
+            if !quiet {
+                println!("Thread {} exited with result: best-move = {:?}, eval = {}, depth = {}", thread_num, m, eval, depth);
+                println!("{} Negamax nodes, {} quiescence nodes, {} TT total hits, {} TT exact hits, {} TT insertions",
+                stats.negamax_nodes.load(Ordering::Relaxed), stats.quiescence_nodes.load(Ordering::Relaxed),
+                stats.tt_total_hits.load(Ordering::Relaxed), stats.tt_exact_hits.load(Ordering::Relaxed),
+                stats.tt_inserts.load(Ordering::Relaxed));
+            }
             if depth > best_depth {
                 best_depth = depth;
                 best_eval = eval;
